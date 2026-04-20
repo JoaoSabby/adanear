@@ -1,9 +1,16 @@
 # sattvaR <img src="man/figures/logo.png" align="right" height="140"/>
 
 <!-- badges -->
-[![R-CMD-check](https://github.com/your-user/sattvaR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/your-user/sattvaR/actions)
-[![CRAN status](https://www.r-pkg.org/badges/version/sattvaR)](https://CRAN.R-project.org/package=sattvaR)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)
+
+![Status](https://img.shields.io/badge/status-in--testing-yellow.svg)
+
+![Lifecycle: Experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html)
+
+![Downloads](https://img.shields.io/github/downloads/JoaoSabby/sattvaR/total?style=flat-square&color=blue)
+
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 

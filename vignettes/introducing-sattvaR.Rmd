@@ -38,13 +38,14 @@ The package was designed for binary classification workflows in which the minori
 
 # Motivation
 
-Class imbalance is a recurring issue in many practical machine learning problems, such as churn prediction, fraud detection, default prediction, medical diagnosis, and anomaly detection.
+The package is motivated by the banking churn framework proposed by @brito2024framework.
 
-When the minority class is rare, standard classification algorithms may converge to solutions with high apparent accuracy but poor ability to detect the event of interest. In such scenarios, the model may classify almost all observations as belonging to the majority class, which makes common metrics such as raw accuracy misleading.
+ADASYN allocates synthetic samples according to local learning difficulty @he2008adasyn.
 
-A more appropriate workflow typically requires explicit treatment of class imbalance, careful control of the training data representation, evaluation with metrics such as PR AUC and ROC AUC, and reproducible preprocessing integrated into the modeling pipeline.
+NearMiss is an informed undersampling strategy based on nearest neighbors @mani2003knn.
 
-`sattvaR` addresses this problem by implementing class balancing directly inside a `recipes` step.
+For comparison, `themis` provides `step_adasyn()` and `step_nearmiss()` as separate recipe steps @hvitfeldt2025themis.
+
 
 # The `step_adanear()` approach
 
