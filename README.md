@@ -4,7 +4,6 @@
 ![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)
 ![Status](https://img.shields.io/badge/status-in--testing-yellow.svg)
 ![Lifecycle: Experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)
-![Downloads](https://img.shields.io/github/downloads/JoaoSabby/sattvaR/total?style=flat-square&color=blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
 ---
