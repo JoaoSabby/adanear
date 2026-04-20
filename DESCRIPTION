@@ -1,0 +1,60 @@
+Package: sattvaR
+Type: Package
+Title: Efficient Binary Class Imbalance Handling via Recipe Steps
+Version: 0.1.0
+Authors@R: 
+    c(
+      person("João B. G. de", "Brito", email = "joao.brito@ufrgs.br", role = c("aut", "cre")),
+      person("Guilherme B.", "Bucco", role = "aut"),
+      person("Rodrigo", "Heldt", role = "aut"),
+      person("João L.", "Becker", role = "aut"),
+      person("Cleo S.", "Silveira", role = "aut"),
+      person("Fernando B.", "Luce", role = "aut"),
+      person("Michel J.", "Anzanello", role = "aut"),
+    )
+Description: Provides efficient and scalable implementations of class imbalance
+    handling techniques for binary classification within the tidymodels framework.
+    The package introduces custom recipe steps designed to improve predictive
+    performance in imbalanced datasets by combining over-sampling and
+    under-sampling strategies. The methods are grounded in recent research on
+    churn prediction in retail banking and are optimized for performance and
+    auditability.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Depends:
+    R (>= 4.1.0)
+Imports:
+    data.table,
+    parallel,
+    Rcpp,
+    RcppHNSW,
+    recipes,
+    rlang,
+    stringr,
+    tibble,
+    withr
+LinkingTo:
+    Rcpp,
+    RcppParallel
+Suggests:
+    bench,
+    dplyr,
+    ggplot2,
+    knitr,
+    modeldata,
+    parsnip,
+    rsample,
+    rmarkdown,
+    testthat (>= 3.0.0),
+    themis,
+    tidymodels,
+    tune,
+    workflows,
+    xgboost,
+    yardstick
+Config/testthat/edition: 3
+URL: https://github.com/JoaoSabby/sattvaR
+BugReports: https://github.com/JoaoSabby/sattvaR/issues
