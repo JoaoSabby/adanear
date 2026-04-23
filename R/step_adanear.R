@@ -517,9 +517,9 @@ ValidateNumericPredictors <- function(training, predictorNames) {
   if (!all(isNumeric)) {
     badNames <- names(isNumeric)[!isNumeric]
     rlang::abort(
-      stringr::str_sub(
+      stringr::str_c(
         "Todos os preditores precisam ser numericos. Problemas em: ",
-        stringr::str_sub(badNames, collapse = ", "),
+        stringr::str_c(badNames, collapse = ", "),
         ". Aplique imputacao, encoding e demais passos antes de step_adanear()."
       )
     )
@@ -529,9 +529,9 @@ ValidateNumericPredictors <- function(training, predictorNames) {
   if (any(hasMissing)) {
     badNames <- names(hasMissing)[hasMissing]
     rlang::abort(
-      stringr::str_sub(
+      stringr::str_c(
         "Todos os preditores precisam estar sem NA antes de step_adanear(). Problemas em: ",
-        stringr::str_sub(badNames, collapse = ", ")
+        stringr::str_c(badNames, collapse = ", ")
       )
     )
   }
@@ -545,9 +545,9 @@ ValidateNumericPredictors <- function(training, predictorNames) {
   if (!all(isFinite)) {
     badNames <- names(isFinite)[!isFinite]
     rlang::abort(
-      stringr::str_sub(
+      stringr::str_c(
         "Todos os preditores precisam conter apenas valores finitos. Problemas em: ",
-        stringr::str_sub(badNames, collapse = ", ")
+        stringr::str_c(badNames, collapse = ", ")
       )
     )
   }
@@ -619,7 +619,7 @@ ValidateAdasynFeasibility <- function(classTable, increaseRatio) {
 
   if (minorityCount < minMinoritySize) {
     rlang::abort(
-      stringr::str_sub(
+      stringr::str_c(
         "Com `increaseRatio > 0`, a classe minoritaria precisa ter pelo menos ",
         minMinoritySize,
         " observacoes."
@@ -938,7 +938,7 @@ GetAdasynDifficulty <- function(xNorm,
 
   if (length(minorityIdx) < minMinoritySize) {
     rlang::abort(
-      stringr::str_sub(
+      stringr::str_c(
         "A classe minoritaria precisa ter pelo menos ",
         minMinoritySize,
         " observacoes."
@@ -1022,9 +1022,9 @@ ResolveColumnIndices <- function(targetNames, predictorNames) {
   if (anyNA(idx)) {
     missingNames <- targetNames[is.na(idx)]
     rlang::abort(
-      stringr::str_sub(
+      stringr::str_c(
         "Falha ao mapear colunas para restauracao de tipos. Problemas em: ",
-        stringr::str_sub(missingNames, collapse = ", ")
+        stringr::str_c(missingNames, collapse = ", ")
       )
     )
   }
@@ -1179,7 +1179,7 @@ GenerateAdasynRows <- function(dataFrame,
   }
 
   if (nMinority < minMinoritySize) {
-    rlang::abort(stringr::str_sub("ADASYN requer pelo menos ", minMinoritySize, " observacoes minoritarias."))
+    rlang::abort(stringr::str_c("ADASYN requer pelo menos ", minMinoritySize, " observacoes minoritarias."))
   }
 
   difficulty <- GetAdasynDifficulty(
