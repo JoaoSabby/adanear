@@ -582,6 +582,12 @@ ValidateStoredStepState <- function(object) {
     rlang::abort("O step treinado nao possui niveis de classe armazenados.")
   }
 
+  # Valida seed para evitar falhas tardias em withr::with_seed()
+  # (por exemplo, objetos serializados antigos com seed = integer(0)).
+  ValidateSingleNumber(object$seed, "seed", minValue = 0, integerish = TRUE)
+
+  ValidateSingleNumber(object$nThreads, "nThreads", minValue = 1, integerish = TRUE)
+
   invisible(TRUE)
 }
 

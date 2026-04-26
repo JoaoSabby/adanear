@@ -71,3 +71,41 @@ test_that("step_adanear valida majorityFraction em (0, 1]", {
     step_adanear(rec, y, majorityFraction = 0.001)
   )
 })
+
+test_that("ValidateStoredStepState falha com seed invalido", {
+  obj <- list(
+    trained = TRUE,
+    column = "y",
+    predictors = "x1",
+    means = c(x1 = 0),
+    sds = c(x1 = 1),
+    minorityLevel = "yes",
+    majorityLevel = "no",
+    seed = integer(0),
+    nThreads = 1L
+  )
+
+  expect_error(
+    sattvaR:::ValidateStoredStepState(obj),
+    "seed"
+  )
+})
+
+test_that("ValidateStoredStepState falha com nThreads invalido", {
+  obj <- list(
+    trained = TRUE,
+    column = "y",
+    predictors = "x1",
+    means = c(x1 = 0),
+    sds = c(x1 = 1),
+    minorityLevel = "yes",
+    majorityLevel = "no",
+    seed = 42L,
+    nThreads = 0L
+  )
+
+  expect_error(
+    sattvaR:::ValidateStoredStepState(obj),
+    "nThreads"
+  )
+})
