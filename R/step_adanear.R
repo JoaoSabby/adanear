@@ -37,11 +37,13 @@
 #'   `RcppHNSW::hnsw_build()` e ao `RcppHNSW::hnsw_search()`
 #' @param m Inteiro positivo. Parametro `M` do grafo HNSW
 #' @param nThreads Inteiro positivo. Numero de threads usado nas rotinas de
-#'   HNSW e RcppParallel
+#'   HNSW e RcppParallel. Default: metade dos nucleos detectados menos um,
+#'   minimo 1. Em ambientes de CI ou pipelines paralelos externos, prefira
+#'   passar `nThreads = 1L` explicitamente.
 #' @param majorityFraction Valor numerico em `(0, 1]`. Fracao da classe
 #'   majoritaria usada para estimar a dificuldade do ADASYN
-#' @param seed Inteiro nao negativo. Semente local usada nas partes aleatorias
-#'   do step
+#' @param seed Inteiro nao negativo ou `NULL`. Semente local usada nas partes
+#'   aleatorias do step. Quando `NULL`, nenhuma semente e fixada.
 #' @param means Medias por coluna usadas na normalizacao. E preenchido no
 #'   `prep()`
 #' @param sds Desvios padrao por coluna usados na normalizacao. E preenchido no
@@ -93,6 +95,9 @@
 #'   )
 #' }
 #'
+
+#' @keywords internal
+#' @noRd
 DefaultThreadCount <- function() {
   detectedCores <- as.integer(parallel::detectCores() / 2L)
 
@@ -157,7 +162,7 @@ step_adanear <- function(recipe,
       m = as.integer(m),
       nThreads = as.integer(max(1L, nThreads)),
       majorityFraction = majorityFraction,
-      seed = as.integer(seed),
+      seed = if (is.null(seed)) NA_integer_ else as.integer(seed),
       means = means,
       sds = sds,
       binaryNames = binaryNames,
@@ -188,7 +193,7 @@ integerTolerance <- 1e-8
 #' @return Um objeto `step_adanear` treinado
 #'
 #' @rdname step_adanear
-#' @export
+#' @exportS3Method recipes::prep
 prep.step_adanear <- function(x, training, info = NULL, ...) {
   selectedColumn <- ResolveSamplingColumn(x$terms, training, info)
   ValidateOutcomeRole(selectedColumn, info)
@@ -246,7 +251,7 @@ prep.step_adanear <- function(x, training, info = NULL, ...) {
 #' @return Um tibble com os dados reamostrados
 #'
 #' @rdname step_adanear
-#' @export
+#' @exportS3Method recipes::bake
 bake.step_adanear <- function(object, new_data, ...) {
   recipes::check_new_data(
     c(object$predictors, object$column),
@@ -317,7 +322,11 @@ bake.step_adanear <- function(object, new_data, ...) {
     tibble::as_tibble(balancedData)
   }
 
-  withr::with_seed(object$seed, ExecuteBake())
+  if (is.na(object$seed)) {
+    ExecuteBake()
+  } else {
+    withr::with_seed(object$seed, ExecuteBake())
+  }
 }
 
 #' Imprime um resumo do step_adanear
@@ -329,7 +338,7 @@ bake.step_adanear <- function(object, new_data, ...) {
 #' @return O proprio objeto, invisivelmente
 #'
 #' @rdname step_adanear
-#' @export
+#' @exportS3Method base::print
 print.step_adanear <- function(x, width = max(20, getOption("width") - 30), ...) {
   termLabel <- if (recipes::is_trained(x)) x$column else recipes::sel2char(x$terms)
 
@@ -337,8 +346,7 @@ print.step_adanear <- function(x, width = max(20, getOption("width") - 30), ...)
   recipes::printer(termLabel, x$terms, x$trained, width = width)
   cat(
     sprintf(
-      "  increaseRatio: %.3f | neighborsAdasyn: %d | neighborsNearMiss: %d | ef: %d | M: %d | threads: %d | majFrac:
-%.2f | seed: %d\n",
+      "  increaseRatio: %.3f | neighborsAdasyn: %d | neighborsNearMiss: %d | ef: %d | M: %d | threads: %d | majFrac: %.2f | seed: %s\n",
       x$increaseRatio,
       x$neighborsAdasyn,
       x$neighborsNearMiss,
@@ -346,7 +354,7 @@ print.step_adanear <- function(x, width = max(20, getOption("width") - 30), ...)
       x$m,
       x$nThreads,
       x$majorityFraction,
-      x$seed
+      if (is.na(x$seed)) "NULL" else as.character(x$seed)
     )
   )
   invisible(x)
@@ -360,7 +368,7 @@ print.step_adanear <- function(x, width = max(20, getOption("width") - 30), ...)
 #' @return Um tibble com a configuracao principal do step
 #'
 #' @rdname step_adanear
-#' @export
+#' @exportS3Method recipes::tidy
 tidy.step_adanear <- function(x, ...) {
   termsValues <- if (recipes::is_trained(x)) x$column else recipes::sel2char(x$terms)
 
@@ -386,7 +394,7 @@ tidy.step_adanear <- function(x, ...) {
 #' @return Um vetor de nomes de pacotes
 #'
 #' @rdname step_adanear
-#' @export
+#' @exportS3Method recipes::required_pkgs
 required_pkgs.step_adanear <- function(x, ...) {
   c(
     "recipes",
@@ -413,10 +421,6 @@ required_pkgs.step_adanear <- function(x, ...) {
 ResolveSamplingColumn <- function(terms, training, info) {
   selected <- recipes::recipes_eval_select(terms, training, info)
   selectedNames <- names(selected)
-
-  if (length(selectedNames) == 0L) {
-    selectedNames <- colnames(training)[unname(selected)]
-  }
 
   if (length(selectedNames) != 1L) {
     rlang::abort("step_adanear() requer que `...` selecione exatamente uma coluna fator binaria.")
@@ -804,7 +808,7 @@ BuildHnswIndex <- function(xMatrix, ef, m, nThreads) {
     M = as.integer(m),
     ef = as.integer(ef),
     n_threads = as.integer(max(1L, nThreads)),
-    grain_size = max(1000L, as.integer(nrow(xMatrix) / (nThreads * 4L))),
+    grain_size = max(1000L, max(1L, as.integer(nrow(xMatrix) / (nThreads * 4L)))),
     byrow = TRUE,
     verbose = FALSE
   )
@@ -814,14 +818,14 @@ BuildHnswIndex <- function(xMatrix, ef, m, nThreads) {
 #'
 #' @param index Objeto retornado por `BuildHnswIndex()`
 #' @param queryMatrix Matriz de consulta
-#' @param k Quantidade de vizinhos desejada
+#' @param neighbors Quantidade de vizinhos desejada
 #' @param ef Parametro `ef` da busca
 #' @param nThreads Numero de threads
 #'
 #' @return Matriz inteira `nConsulta x k` com indices 1-based
 #'
 #' @keywords internal
-QueryHnswIndex <- function(index, queryMatrix, neighbors, ef, nThreads){
+QueryHnswIndex <- function(index, queryMatrix, neighbors, ef, nThreads) {
   if (!is.matrix(queryMatrix)) {
     rlang::abort("QueryHnswIndex() espera uma matriz de consulta.")
   }
@@ -842,7 +846,7 @@ QueryHnswIndex <- function(index, queryMatrix, neighbors, ef, nThreads){
     rlang::abort("QueryHnswIndex() recebeu valores NA, NaN ou Inf.")
   }
 
-  ValidateSingleNumber(neighbors , "neighbors", minValue = 1L, integerish = TRUE)
+  ValidateSingleNumber(neighbors, "neighbors", minValue = 1L, integerish = TRUE)
   ValidateSingleNumber(ef, "ef", minValue = 1L, integerish = TRUE)
   ValidateSingleNumber(nThreads, "nThreads", minValue = 1L, integerish = TRUE)
 
@@ -852,7 +856,7 @@ QueryHnswIndex <- function(index, queryMatrix, neighbors, ef, nThreads){
     k = as.integer(neighbors),
     ef = as.integer(ef),
     n_threads = as.integer(max(1L, nThreads)),
-    grain_size = max(1000L, as.integer(nrow(queryMatrix) / (nThreads * 4L))),
+    grain_size = max(1000L, max(1L, as.integer(nrow(queryMatrix) / (nThreads * 4L)))),
     byrow = TRUE
   )
 
@@ -1043,6 +1047,7 @@ ResolveColumnIndices <- function(targetNames, predictorNames) {
 #' @param integerNames Nomes de colunas inteiras
 #' @param nonNegativeIntegerNames Nomes de colunas inteiras nao negativas
 #' @param predictorNames Nomes de todos os preditores
+#' @param nThreads Numero de threads
 #'
 #' @return Matriz numerica com os sinteticos na escala original
 #'
@@ -1058,7 +1063,7 @@ InterpolateSyntheticPoints <- function(
     nonNegativeIntegerNames,
     predictorNames,
     nThreads
-){
+) {
 
   lambdas <- stats::runif(length(anchorLocal))
 
@@ -1077,7 +1082,7 @@ InterpolateSyntheticPoints <- function(
     numThreads = as.integer(max(1L, nThreads))
   )
 
-  RestoreTypesCpp(
+  synRaw <- RestoreTypesCpp(
     synMat = synRaw,
     binCols = ResolveColumnIndices(binaryNames, predictorNames),
     intCols = ResolveColumnIndices(integerNames, predictorNames),
@@ -1240,7 +1245,7 @@ GenerateAdasynRows <- function(dataFrame,
 #'
 #' @param searchResult Lista retornada por `RcppHNSW::hnsw_search()`
 #' @param expectedRows Numero esperado de linhas
-#' @param nThreads
+#' @param nThreads Numero de threads
 #'
 #' @return Vetor numerico com uma distancia media por linha consultada
 #'
@@ -1312,13 +1317,15 @@ SelectNearMissRows <- function(dataFrame,
 
   indexMin <- BuildHnswIndex(xNorm[minorityIdx, , drop = FALSE], ef, m, nThreads)
 
+  majorityMatrix <- xNorm[majorityIdx, , drop = FALSE]
+
   searchResult <- RcppHNSW::hnsw_search(
-    X = xNorm[majorityIdx, , drop = FALSE],
+    X = majorityMatrix,
     ann = indexMin,
     k = min(neighborsNearMiss, nMinority),
     ef = ef,
     n_threads = as.integer(max(1L, nThreads)),
-    grain_size = max(1000L, as.integer(nrow(xNorm[majorityIdx, , drop = FALSE]) / (nThreads * 4L))),
+    grain_size = max(1000L, max(1L, as.integer(nrow(majorityMatrix) / (nThreads * 4L)))),
     byrow = TRUE
   )
 
@@ -1409,12 +1416,12 @@ ValidateSingleNumber <- function(
 #'
 #' Conversoes aplicadas:
 #' - `factor`: reconstrucao com os niveis originais
-#' - `integer`: arredondamento seguido de coerção para inteiro
+#' - `integer`: arredondamento seguido de coercao para inteiro
 #' - `numeric`: mantido como numerico
-#' - `logical`: coerção para logico
+#' - `logical`: coercao para logico
 #' - `Date`: reconstrucao a partir de origem unix
 #' - `POSIXct`: reconstrucao preservando timezone
-#' - `character`: coerção para string
+#' - `character`: coercao para string
 #'
 #' @param dataFrame Data.frame contendo os dados transformados que precisam
 #'   ter os tipos restaurados
@@ -1437,50 +1444,32 @@ ValidateSingleNumber <- function(
 #' @keywords internal
 RestoreOriginalColumnTypes <- function(dataFrame, templateDataFrame) {
 
-  # Identifica colunas presentes em ambos os data.frames
   commonNames <- intersect(names(templateDataFrame), names(dataFrame))
 
-  # Itera sobre cada coluna compartilhada
   for (columnName in commonNames) {
 
-    # Coluna original (referencia de tipo)
     templateColumn <- templateDataFrame[[columnName]]
+    currentColumn  <- dataFrame[[columnName]]
 
-    # Coluna atual (pos transformacoes numericas)
-    currentColumn <- dataFrame[[columnName]]
-
-    # Reconstrucao de fator com niveis originais
     if (is.factor(templateColumn)) {
       dataFrame[[columnName]] <- factor(
         as.character(currentColumn),
         levels = levels(templateColumn)
       )
-
-      # Inteiros sao restaurados via arredondamento
     } else if (is.integer(templateColumn)) {
       dataFrame[[columnName]] <- as.integer(round(currentColumn))
-
-      # Numericos permanecem numericos
     } else if (is.numeric(templateColumn)) {
       dataFrame[[columnName]] <- as.numeric(currentColumn)
-
-      # Logicos sao restaurados diretamente
     } else if (is.logical(templateColumn)) {
       dataFrame[[columnName]] <- as.logical(currentColumn)
-
-      # Datas sao reconstruidas a partir da origem unix
     } else if (inherits(templateColumn, "Date")) {
       dataFrame[[columnName]] <- as.Date(currentColumn, origin = "1970-01-01")
-
-      # POSIXct preserva timezone original
     } else if (inherits(templateColumn, "POSIXct")) {
       dataFrame[[columnName]] <- as.POSIXct(
         currentColumn,
         origin = "1970-01-01",
         tz = attr(templateColumn, "tzone", exact = TRUE)
       )
-
-      # Strings sao restauradas como character
     } else if (is.character(templateColumn)) {
       dataFrame[[columnName]] <- as.character(currentColumn)
     }
