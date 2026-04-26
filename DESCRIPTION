@@ -31,6 +31,7 @@ Imports:
     parallel,
     Rcpp,
     RcppHNSW,
+    RcppParallel,
     recipes,
     rlang,
     stringr,

@@ -395,7 +395,6 @@ required_pkgs.step_adanear <- function(x, ...) {
     "tibble",
     "data.table",
     "RcppHNSW",
-    "RcppParallel",
     "parallel",
     "withr",
     "stringr"
@@ -624,8 +623,12 @@ BuildNormalizationStats <- function(xMatrix) {
 }
 
 #' @noRd
+# FIX BUG-02: aplicar droplevels() internamente para que niveis de fator com
+# contagem zero nao influenciem which.min() / which.max(), evitando que
+# minority e majority sejam atribuidos incorretamente apos subsetting de folds
+# de validacao cruzada onde um nivel pode existir no fator mas ter zero linhas.
 DetectClassLevels <- function(yVector) {
-  classTable <- table(yVector)
+  classTable <- table(droplevels(yVector))
 
   if (length(unique(as.integer(classTable))) == 1L) {
     rlang::abort("As classes estao empatadas. Nao ha minoria e maioria bem definidas.")
@@ -796,6 +799,73 @@ QueryHnswIndex <- function(index, queryMatrix, neighbors, ef, nThreads) {
 
   storage.mode(idx) <- "integer"
   idx
+}
+
+#' @noRd
+# FIX BUG-01: wrapper que retorna tanto indices quanto distancias do HNSW,
+# centralizando validacoes (is.matrix, anyNA, is.finite, dim fix) e o calculo
+# seguro de grain_size. SelectNearMissRows passa a usar este wrapper em vez de
+# chamar RcppHNSW::hnsw_search() diretamente, o que eliminava todas essas
+# salvaguardas e duplicava a logica de grain_size.
+QueryHnswIndexWithDist <- function(index, queryMatrix, neighbors, ef, nThreads) {
+  if (!is.matrix(queryMatrix)) {
+    rlang::abort("QueryHnswIndexWithDist() espera uma matriz de consulta.")
+  }
+
+  if (!is.numeric(queryMatrix)) {
+    rlang::abort("QueryHnswIndexWithDist() espera uma matriz numerica.")
+  }
+
+  if (nrow(queryMatrix) == 0L) {
+    rlang::abort("QueryHnswIndexWithDist() recebeu zero linhas de consulta.")
+  }
+
+  if (ncol(queryMatrix) == 0L) {
+    rlang::abort("QueryHnswIndexWithDist() recebeu zero colunas de consulta.")
+  }
+
+  if (anyNA(queryMatrix) || any(!is.finite(queryMatrix))) {
+    rlang::abort("QueryHnswIndexWithDist() recebeu valores NA, NaN ou Inf.")
+  }
+
+  ValidateSingleNumber(neighbors, "neighbors", minValue = 1L, integerish = TRUE)
+  ValidateSingleNumber(ef, "ef", minValue = 1L, integerish = TRUE)
+  ValidateSingleNumber(nThreads, "nThreads", minValue = 1L, integerish = TRUE)
+
+  safeGrain <- max(1000L, as.integer(nrow(queryMatrix) / max(1L, nThreads * 4L)))
+
+  searchResult <- RcppHNSW::hnsw_search(
+    X = queryMatrix,
+    ann = index,
+    k = as.integer(neighbors),
+    ef = as.integer(ef),
+    n_threads = as.integer(max(1L, nThreads)),
+    grain_size = safeGrain,
+    byrow = TRUE
+  )
+
+  idx <- searchResult$idx
+  dst <- searchResult$dist
+
+  if (is.null(idx)) {
+    rlang::abort("RcppHNSW::hnsw_search() nao retornou indices.")
+  }
+
+  if (is.null(dst)) {
+    rlang::abort("RcppHNSW::hnsw_search() nao retornou distancias.")
+  }
+
+  if (is.null(dim(idx))) {
+    idx <- matrix(as.integer(idx), nrow = nrow(queryMatrix), byrow = TRUE)
+  }
+
+  if (!identical(nrow(idx), nrow(queryMatrix))) {
+    rlang::abort("A matriz de indices retornada pelo HNSW veio com numero inesperado de linhas.")
+  }
+
+  storage.mode(idx) <- "integer"
+
+  list(idx = idx, dist = dst)
 }
 
 #' @noRd
@@ -1105,6 +1175,10 @@ ExtractDistanceVector <- function(searchResult, expectedRows, nThreads) {
 }
 
 #' @noRd
+# FIX BUG-01: substituida chamada direta a RcppHNSW::hnsw_search() por
+# QueryHnswIndexWithDist(), que centraliza validacoes de entrada (is.matrix,
+# anyNA, is.finite, dim fix) e o calculo seguro de grain_size — mantendo
+# consistencia com todos os outros pontos de acesso ao HNSW no codigo.
 SelectNearMissRows <- function(dataFrame,
                                xNorm,
                                outcomeName,
@@ -1132,17 +1206,12 @@ SelectNearMissRows <- function(dataFrame,
 
   indexMin <- BuildHnswIndex(xNorm[minorityIdx, , drop = FALSE], ef, m, nThreads)
 
-  # FIX PERF-02: mesma protecao de grain_size aplicada nas demais chamadas HNSW
-  safeGrain <- max(1000L, as.integer(nMajority / max(1L, nThreads * 4L)))
-
-  searchResult <- RcppHNSW::hnsw_search(
-    X = xNorm[majorityIdx, , drop = FALSE],
-    ann = indexMin,
-    k = min(neighborsNearMiss, nMinority),
+  searchResult <- QueryHnswIndexWithDist(
+    index = indexMin,
+    queryMatrix = xNorm[majorityIdx, , drop = FALSE],
+    neighbors = min(neighborsNearMiss, nMinority),
     ef = ef,
-    n_threads = as.integer(max(1L, nThreads)),
-    grain_size = safeGrain,
-    byrow = TRUE
+    nThreads = nThreads
   )
 
   avgDist <- ExtractDistanceVector(
@@ -1232,5 +1301,5 @@ RestoreOriginalColumnTypes <- function(dataFrame, templateDataFrame) {
     }
   }
 
-  return(dataFrame)
+  dataFrame
 }
