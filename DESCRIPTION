@@ -10,7 +10,7 @@ Authors@R:
       person("João L.", "Becker", role = "aut"),
       person("Cleo S.", "Silveira", role = "aut"),
       person("Fernando B.", "Luce", role = "aut"),
-      person("Michel J.", "Anzanello", role = "aut"),
+      person("Michel J.", "Anzanello", role = "aut")
     )
 Description: Provides efficient and scalable implementations of class imbalance
     handling techniques for binary classification within the tidymodels framework.
