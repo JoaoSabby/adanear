@@ -109,3 +109,38 @@ test_that("ValidateStoredStepState falha com nThreads invalido", {
     "nThreads"
   )
 })
+
+test_that("prep.step_adanear bloqueia inteiros acima de 2^53", {
+  training <- data.frame(
+    y = factor(c("no", "no", "no", "yes")),
+    id = c(2^53 + 1, 2^53 + 3, 2^53 + 5, 2^53 + 7),
+    x1 = c(1, 2, 3, 4)
+  )
+
+  rec <- recipes::recipe(y ~ ., data = training) |>
+    step_adanear(y, increaseRatio = 0)
+
+  expect_error(
+    recipes::prep(rec, training = training),
+    "2\\^53"
+  )
+})
+
+test_that("tunable.step_adanear expõe hiperparâmetros para tune", {
+  training <- data.frame(
+    y = factor(c("no", "no", "no", "yes")),
+    x1 = c(0.1, 0.2, 0.3, 0.4)
+  )
+
+  rec <- recipes::recipe(y ~ ., data = training) |>
+    step_adanear(y, increaseRatio = 0)
+
+  st <- rec$steps[[1]]
+  tunable_tbl <- dials::tunable(st)
+
+  expect_s3_class(tunable_tbl, "tbl_df")
+  expect_setequal(
+    tunable_tbl$name,
+    c("increaseRatio", "neighborsAdasyn", "neighborsNearMiss", "majorityFraction")
+  )
+})
