@@ -41,4 +41,51 @@ Brito, João B. G. de, Bucco, Guilherme B., Heldt, Rodrigo, Becker, João. L.,  
 pak::pak("JoaoSabby/sattvaR")
 ```
 
+## Quick workflow example (tidymodels)
+
+```r
+rec <- recipes::recipe(TARGET ~ ., data = dados) |>
+  recipes::step_dummy(recipes::all_nominal_predictors()) |>
+  recipes::update_role(ID, new_role = "id") |>
+  sattvaR::step_adanear(TARGET, increaseRatio = 0.2, neighborsAdasyn = 5, neighborsNearMiss = 5, seed = 42)
+
+wf <- workflows::workflow() |>
+  workflows::add_recipe(rec) |>
+  workflows::add_model(
+    parsnip::boost_tree(mode = "classification", trees = 500, tree_depth = 6, learn_rate = 0.05, loss_reduction = 0, sample_size = 0.8) |>
+      parsnip::set_engine("xgboost", objective = "binary:logistic", nthread = 2)
+  )
+```
+
+### Common `add_recipe()` error
+
+If you get:
+
+- `Error in add_recipe(): ... must be empty`
+- `Problematic argument: receita = ...`
+
+use `workflows::add_recipe(rec)` (or `recipe = rec`) and **do not** use a custom argument name like `receita = ...`.
+
+
+### If `library(sattvaR)` says `help/sattvaR.rdb is corrupt`
+
+This is an installed-library issue (corrupted lazy-load/help database), not a modeling error in `step_adanear()`.
+
+Recommended fix:
+
+```r
+# 1) unload if attached
+if ("package:sattvaR" %in% search()) detach("package:sattvaR", unload = TRUE, character.only = TRUE)
+
+# 2) remove installed copy
+remove.packages("sattvaR")
+
+# 3) install again from GitHub
+pak::pak("JoaoSabby/sattvaR")
+
+# 4) start a fresh R session and load
+library(sattvaR)
+```
+
+If the error persists, manually delete the old install directory shown in the message and reinstall.
 
