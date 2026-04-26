@@ -4,6 +4,7 @@
 \alias{bake.step_adanear}
 \alias{print.step_adanear}
 \alias{tidy.step_adanear}
+\alias{tunable.step_adanear}
 \alias{required_pkgs.step_adanear}
 \title{ADASYN + NearMiss em um step customizado do recipes}
 \usage{
@@ -21,7 +22,7 @@ step_adanear(
   m = 16L,
   nThreads = NULL,
   majorityFraction = 1,
-  seed = sample.int(10^5, 1),
+  seed = NULL,
   means = NULL,
   sds = NULL,
   binaryNames = NULL,
@@ -45,9 +46,9 @@ step_adanear(
 \item{neighborsNearMiss}{Número de vizinhos minoritários no NearMiss-1.}
 \item{ef}{Parâmetro \code{ef} do HNSW.}
 \item{m}{Parâmetro \code{M} do HNSW.}
-\item{nThreads}{Número de threads; \code{NULL} usa detecção automática.}
+\item{nThreads}{Número de threads; \code{NULL} usa detecção automática com limites seguros do ambiente.}
 \item{majorityFraction}{Fração da maioria usada no ADASYN.}
-\item{seed}{Semente local para as etapas aleatórias.}
+\item{seed}{Semente local para as etapas aleatórias; \code{NULL} usa o RNG global.}
 \item{means}{Médias por coluna para normalização.}
 \item{sds}{Desvios padrão por coluna para normalização.}
 \item{binaryNames}{Nomes de preditores binários.}

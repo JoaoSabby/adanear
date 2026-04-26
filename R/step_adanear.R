@@ -38,15 +38,16 @@
 #' @param m Inteiro positivo. Parametro `M` do grafo HNSW
 #' @param nThreads Inteiro positivo ou `NULL`. Numero de threads usado nas
 #'   rotinas de HNSW e RcppParallel. Quando `NULL` (padrao), usa
-#'   `DefaultThreadCount()` que detecta automaticamente metade dos nucleos
-#'   disponiveis menos um. Para garantir seguranca em pipelines paralelos
-#'   (ex.: `tune::tune_grid()`), defina explicitamente `nThreads = 1L`
+#'   `DefaultThreadCount()` que respeita limites de CPU do ambiente e reserva
+#'   margem para evitar nested parallelism agressivo. Para garantir seguranca
+#'   em pipelines paralelos (ex.: `tune::tune_grid()`), defina explicitamente
+#'   `nThreads = 1L`
 #' @param majorityFraction Valor numerico em `(0, 1]`. Fracao da classe
 #'   majoritaria usada para estimar a dificuldade do ADASYN
-#' @param seed Inteiro nao negativo. Semente local usada nas partes aleatorias
-#'   do step. O default `sample.int(10^5, 1)` gera uma semente diferente a
-#'   cada chamada, o que nao e reprodutivel entre runs. Para garantir
-#'   reprodutibilidade, defina explicitamente, ex.: `seed = 42L`
+#' @param seed Inteiro nao negativo ou `NULL`. Semente local usada nas partes
+#'   aleatorias do step. Quando `NULL` (padrao), o step usa o estado global de
+#'   RNG do R (nao fixa uma semente interna). Para garantir reprodutibilidade
+#'   estrita entre runs, defina explicitamente, ex.: `seed = 42L`
 #' @param means Medias por coluna usadas na normalizacao. E preenchido no
 #'   `prep()`
 #' @param sds Desvios padrao por coluna usados na normalizacao. E preenchido no
@@ -112,7 +113,7 @@ step_adanear <- function(recipe,
                          m = 16L,
                          nThreads = NULL,
                          majorityFraction = 1.0,
-                         seed = sample.int(10^5, 1),
+                         seed = NULL,
                          means = NULL,
                          sds = NULL,
                          binaryNames = NULL,
@@ -140,12 +141,8 @@ step_adanear <- function(recipe,
     maxValue = 1
   )
 
-  # FIX BUG-01: seed nunca pode ser NULL ao chegar em recipes::step().
-  # Se o usuario passar seed = NULL, substituimos por uma semente aleatoria
-  # aqui, antes do as.integer(). Caso contrario, as.integer(NULL) = integer(0)
-  # e withr::with_seed() falharia em tempo de bake() com erro dificil de rastrear.
-  seed <- if (is.null(seed)) sample.int(10^5, 1L) else seed
-  ValidateSingleNumber(seed, "seed", minValue = 0, integerish = TRUE)
+  ValidateSingleNumber(seed, "seed", minValue = 0, integerish = TRUE, allowNull = TRUE)
+  seedStored <- if (is.null(seed)) NA_integer_ else as.integer(seed)
 
   recipes::add_step(
     recipe,
@@ -163,7 +160,7 @@ step_adanear <- function(recipe,
       m = as.integer(m),
       nThreads = as.integer(max(1L, nThreads)),
       majorityFraction = majorityFraction,
-      seed = as.integer(seed),
+      seed = seedStored,
       means = means,
       sds = sds,
       binaryNames = binaryNames,
@@ -200,6 +197,7 @@ prep.step_adanear <- function(x, training, info = NULL, ...) {
 
   ValidateOutcome(training, selectedColumn)
   ValidateNumericPredictors(training, predictorNames)
+  ValidateIntegerPrecisionRisk(training, predictorNames)
 
   xMatrix <- as.matrix(training[, predictorNames, drop = FALSE])
   normStats <- BuildNormalizationStats(xMatrix)
@@ -324,7 +322,11 @@ bake.step_adanear <- function(object, new_data, ...) {
     tibble::as_tibble(balancedData)
   }
 
-  withr::with_seed(object$seed, ExecuteBake())
+  if (is.na(object$seed)) {
+    ExecuteBake()
+  } else {
+    withr::with_seed(object$seed, ExecuteBake())
+  }
 }
 
 #' Imprime um resumo do step_adanear
@@ -339,12 +341,13 @@ bake.step_adanear <- function(object, new_data, ...) {
 #' @exportS3Method base::print
 print.step_adanear <- function(x, width = max(20, getOption("width") - 30), ...) {
   termLabel <- if (recipes::is_trained(x)) x$column else recipes::sel2char(x$terms)
+  seedLabel <- if (length(x$seed) == 1L && is.na(x$seed)) "global_rng" else as.character(x$seed)
 
   cat("ADASYN + NearMiss sampling on ")
   recipes::printer(termLabel, x$terms, x$trained, width = width)
   cat(
     sprintf(
-      "  increaseRatio: %.3f | neighborsAdasyn: %d | neighborsNearMiss: %d | ef: %d | M: %d | threads: %d | majFrac: %.2f | seed: %d\n",
+      "  increaseRatio: %.3f | neighborsAdasyn: %d | neighborsNearMiss: %d | ef: %d | M: %d | threads: %d | majFrac: %.2f | seed: %s\n",
       x$increaseRatio,
       x$neighborsAdasyn,
       x$neighborsNearMiss,
@@ -352,7 +355,7 @@ print.step_adanear <- function(x, width = max(20, getOption("width") - 30), ...)
       x$m,
       x$nThreads,
       x$majorityFraction,
-      x$seed
+      seedLabel
     )
   )
   invisible(x)
@@ -379,8 +382,39 @@ tidy.step_adanear <- function(x, ...) {
     m = x$m,
     nThreads = x$nThreads,
     majorityFraction = x$majorityFraction,
-    seed = x$seed,
+    seed = if (length(x$seed) == 1L && is.na(x$seed)) NA_integer_ else x$seed,
     id = x$id
+  )
+}
+
+#' Parametros ajustaveis de `step_adanear()`
+#'
+#' Expõe os hiperparâmetros que podem ser otimizados via `tune`/`dials`.
+#'
+#' @param x Um objeto `step_adanear`
+#' @param ... Nao usado
+#'
+#' @return Um tibble no formato esperado por `dials::tunable()`
+#'
+#' @rdname step_adanear
+#' @exportS3Method dials::tunable
+tunable.step_adanear <- function(x, ...) {
+  tibble::tibble(
+    name = c(
+      "increaseRatio",
+      "neighborsAdasyn",
+      "neighborsNearMiss",
+      "majorityFraction"
+    ),
+    call_info = list(
+      list(pkg = "dials", fun = "over_ratio", range = c(NA, NA), trans = NULL),
+      list(pkg = "dials", fun = "neighbors", range = c(NA, NA), trans = NULL),
+      list(pkg = "dials", fun = "neighbors", range = c(NA, NA), trans = NULL),
+      list(pkg = "dials", fun = "frac_pt", range = c(NA, NA), trans = NULL)
+    ),
+    source = "recipe",
+    component = "step_adanear",
+    component_id = x$id
   )
 }
 
@@ -400,6 +434,7 @@ required_pkgs.step_adanear <- function(x, ...) {
     "tibble",
     "data.table",
     "RcppHNSW",
+    "parallelly",
     "parallel",
     "withr",
     "stringr"
@@ -411,13 +446,18 @@ required_pkgs.step_adanear <- function(x, ...) {
 
 #' @noRd
 DefaultThreadCount <- function() {
-  detectedCores <- as.integer(parallel::detectCores() / 2L)
+  available <- tryCatch(
+    parallelly::availableCores(omit = 1L),
+    error = function(...) parallel::detectCores(logical = TRUE)
+  )
 
-  if (length(detectedCores) != 1L || is.na(detectedCores) || detectedCores < 2L) {
+  available <- as.integer(available[[1]])
+
+  if (length(available) != 1L || is.na(available) || available < 1L) {
     return(1L)
   }
 
-  as.integer(detectedCores - 1L)
+  as.integer(max(1L, available))
 }
 
 #' @noRd
@@ -582,6 +622,10 @@ ValidateStoredStepState <- function(object) {
     rlang::abort("O step treinado nao possui niveis de classe armazenados.")
   }
 
+  ValidateSeedSetting(object$seed)
+
+  ValidateSingleNumber(object$nThreads, "nThreads", minValue = 1, integerish = TRUE)
+
   invisible(TRUE)
 }
 
@@ -707,6 +751,46 @@ IsBinaryNumeric <- function(x, tolerance = integerTolerance) {
   }
 
   all(abs(values) < tolerance | abs(values - 1.0) < tolerance)
+}
+
+#' @noRd
+ValidateIntegerPrecisionRisk <- function(training, predictorNames) {
+  if (length(predictorNames) == 0L) {
+    return(invisible(TRUE))
+  }
+
+  safeIntegerLimit <- 2^53
+
+  isWhole <- vapply(
+    training[, predictorNames, drop = FALSE],
+    IsWholeNumber,
+    logical(1)
+  )
+
+  candidateNames <- predictorNames[isWhole]
+  if (length(candidateNames) == 0L) {
+    return(invisible(TRUE))
+  }
+
+  riskyNames <- candidateNames[
+    vapply(
+      training[, candidateNames, drop = FALSE],
+      function(column) any(abs(column[is.finite(column)]) > safeIntegerLimit),
+      logical(1)
+    )
+  ]
+
+  if (length(riskyNames) > 0L) {
+    rlang::abort(
+      stringr::str_c(
+        "Foram detectados inteiros acima de 2^53 em preditores: ",
+        stringr::str_c(riskyNames, collapse = ", "),
+        ". Para evitar perda de precisao em interpolacao, remova IDs/chaves do step_adanear() ou transforme-os antes."
+      )
+    )
+  }
+
+  invisible(TRUE)
 }
 
 #' @noRd
@@ -1276,6 +1360,20 @@ ValidateSingleNumber <- function(
     )
   }
 
+  invisible(TRUE)
+}
+
+#' @noRd
+ValidateSeedSetting <- function(seed) {
+  if (length(seed) != 1L) {
+    rlang::abort("`seed` precisa ser escalar ou NA_integer_.")
+  }
+
+  if (is.na(seed)) {
+    return(invisible(TRUE))
+  }
+
+  ValidateSingleNumber(seed, "seed", minValue = 0, integerish = TRUE)
   invisible(TRUE)
 }
 
