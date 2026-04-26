@@ -402,7 +402,9 @@ tidy.step_adanear <- function(x, ...) {
 #' @return Um tibble no formato esperado por `dials::tunable()`
 #'
 #' @rdname step_adanear
-#' @exportS3Method dials::tunable
+# Registro S3 de `tunable` e feito condicionalmente em `.onLoad()`
+# para manter compatibilidade com versoes do `dials` que nao exportam esse
+# generico.
 tunable.step_adanear <- function(x, ...) {
   tibble::tibble(
     name = c(
