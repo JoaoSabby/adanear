@@ -53,3 +53,21 @@ test_that("prep.step_adanear blocks non numeric predictors", {
     "precisam ser numericos"
   )
 })
+
+test_that("step_adanear valida majorityFraction em (0, 1]", {
+  training <- data.frame(
+    y = factor(c("no", "no", "no", "yes")),
+    x1 = c(1, 2, 3, 4)
+  )
+
+  rec <- recipes::recipe(y ~ ., data = training)
+
+  expect_error(
+    step_adanear(rec, y, majorityFraction = 0),
+    "majorityFraction"
+  )
+
+  expect_no_error(
+    step_adanear(rec, y, majorityFraction = 0.001)
+  )
+})

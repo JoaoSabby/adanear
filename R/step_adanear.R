@@ -133,7 +133,12 @@ step_adanear <- function(recipe,
   ValidateSingleNumber(ef, "ef", minValue = 1, integerish = TRUE)
   ValidateSingleNumber(m, "m", minValue = 1, integerish = TRUE)
   ValidateSingleNumber(nThreads, "nThreads", minValue = 1, integerish = TRUE)
-  ValidateSingleNumber(majorityFraction, "majorityFraction", minValue = 0.01, maxValue = 1)
+  ValidateSingleNumber(
+    majorityFraction,
+    "majorityFraction",
+    minValue = .Machine$double.eps,
+    maxValue = 1
+  )
 
   # FIX BUG-01: seed nunca pode ser NULL ao chegar em recipes::step().
   # Se o usuario passar seed = NULL, substituimos por uma semente aleatoria
@@ -705,6 +710,17 @@ IsBinaryNumeric <- function(x, tolerance = integerTolerance) {
 }
 
 #' @noRd
+ComputeSafeGrainSize <- function(nRows, nThreads) {
+  ValidateSingleNumber(nRows, "nRows", minValue = 1L, integerish = TRUE)
+  ValidateSingleNumber(nThreads, "nThreads", minValue = 1L, integerish = TRUE)
+
+  # Usa aritmetica em double para evitar overflow de inteiro no denominador.
+  denominator <- max(1, as.double(nThreads) * 4.0)
+  grain <- as.integer(floor(as.double(nRows) / denominator))
+  max(1000L, grain)
+}
+
+#' @noRd
 BuildHnswIndex <- function(xMatrix, ef, m, nThreads) {
   if (!is.matrix(xMatrix)) {
     rlang::abort("BuildHnswIndex() espera uma matriz.")
@@ -726,11 +742,7 @@ BuildHnswIndex <- function(xMatrix, ef, m, nThreads) {
     rlang::abort("BuildHnswIndex() recebeu valores NA, NaN ou Inf.")
   }
 
-  # FIX PERF-02: o denominador e protegido com max(1L, ...) antes da divisao
-  # para evitar overflow de inteiro quando nThreads for grande, e o resultado
-  # da divisao e calculado em double antes do as.integer() para evitar
-  # truncamento precoce para zero.
-  safeGrain <- max(1000L, as.integer(nrow(xMatrix) / max(1L, nThreads * 4L)))
+  safeGrain <- ComputeSafeGrainSize(nrow(xMatrix), nThreads)
 
   RcppHNSW::hnsw_build(
     X = xMatrix,
@@ -770,8 +782,7 @@ QueryHnswIndex <- function(index, queryMatrix, neighbors, ef, nThreads) {
   ValidateSingleNumber(ef, "ef", minValue = 1L, integerish = TRUE)
   ValidateSingleNumber(nThreads, "nThreads", minValue = 1L, integerish = TRUE)
 
-  # FIX PERF-02: mesma protecao de grain_size aplicada no BuildHnswIndex
-  safeGrain <- max(1000L, as.integer(nrow(queryMatrix) / max(1L, nThreads * 4L)))
+  safeGrain <- ComputeSafeGrainSize(nrow(queryMatrix), nThreads)
 
   searchResult <- RcppHNSW::hnsw_search(
     X = queryMatrix,
@@ -832,7 +843,7 @@ QueryHnswIndexWithDist <- function(index, queryMatrix, neighbors, ef, nThreads) 
   ValidateSingleNumber(ef, "ef", minValue = 1L, integerish = TRUE)
   ValidateSingleNumber(nThreads, "nThreads", minValue = 1L, integerish = TRUE)
 
-  safeGrain <- max(1000L, as.integer(nrow(queryMatrix) / max(1L, nThreads * 4L)))
+  safeGrain <- ComputeSafeGrainSize(nrow(queryMatrix), nThreads)
 
   searchResult <- RcppHNSW::hnsw_search(
     X = queryMatrix,
