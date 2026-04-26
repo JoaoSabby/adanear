@@ -3,5 +3,6 @@
 S3method(bake,step_adanear)
 S3method(prep,step_adanear)
 S3method(print,step_adanear)
+S3method(required_pkgs,step_adanear)
 S3method(tidy,step_adanear)
 export(step_adanear)
