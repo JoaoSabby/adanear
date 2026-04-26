@@ -629,7 +629,13 @@ ValidateStoredStepState <- function(object) {
     rlang::abort("O step treinado nao possui niveis de classe armazenados.")
   }
 
-  ValidateSeedSetting(object$seed)
+  if (length(object$seed) != 1L) {
+    rlang::abort("`seed` precisa ser escalar ou NA_integer_.")
+  }
+
+  if (!is.na(object$seed)) {
+    ValidateSingleNumber(object$seed, "seed", minValue = 0, integerish = TRUE)
+  }
 
   ValidateSingleNumber(object$nThreads, "nThreads", minValue = 1, integerish = TRUE)
 
@@ -1124,7 +1130,7 @@ InterpolateSyntheticPoints <- function(
     numThreads = as.integer(max(1L, nThreads))
   )
 
-  synRaw <- RestoreTypesCpp(
+  RestoreTypesCpp(
     synMat = synRaw,
     binCols = ResolveColumnIndices(binaryNames, predictorNames),
     intCols = ResolveColumnIndices(integerNames, predictorNames),
@@ -1367,20 +1373,6 @@ ValidateSingleNumber <- function(
     )
   }
 
-  invisible(TRUE)
-}
-
-#' @noRd
-ValidateSeedSetting <- function(seed) {
-  if (length(seed) != 1L) {
-    rlang::abort("`seed` precisa ser escalar ou NA_integer_.")
-  }
-
-  if (is.na(seed)) {
-    return(invisible(TRUE))
-  }
-
-  ValidateSingleNumber(seed, "seed", minValue = 0, integerish = TRUE)
   invisible(TRUE)
 }
 
