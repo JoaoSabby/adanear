@@ -633,7 +633,13 @@ ValidateStoredStepState <- function(object) {
     rlang::abort("O step treinado nao possui niveis de classe armazenados.")
   }
 
-  ValidateSeedSetting(object$seed)
+  if (length(object$seed) != 1L) {
+    rlang::abort("`seed` precisa ser escalar ou NA_integer_.")
+  }
+
+  if (!is.na(object$seed)) {
+    ValidateSingleNumber(object$seed, "seed", minValue = 0, integerish = TRUE)
+  }
 
   ValidateSingleNumber(object$nThreads, "nThreads", minValue = 1, integerish = TRUE)
 
@@ -1153,7 +1159,7 @@ InterpolateSyntheticPoints <- function(
     numThreads = as.integer(max(1L, nThreads))
   )
 
-  synRaw <- RestoreTypesCpp(
+  RestoreTypesCpp(
     synMat = synRaw,
     binCols = ResolveColumnIndices(binaryNames, predictorNames),
     intCols = ResolveColumnIndices(integerNames, predictorNames),
@@ -1411,49 +1417,7 @@ ValidateSingleNumber <- function(
   invisible(TRUE)
 }
 
-#' Restaura os tipos originais das colunas apos transformacoes numericas
-#'
-#' Funcao utilitaria para restaurar os tipos originais das colunas de um
-#' data.frame apos operacoes que convertem tudo para numerico, como
-#' normalizacao, interpolacao (ADASYN) e concatenacao de dados sinteticos
-#'
-#' A funcao utiliza um data.frame de referencia (`templateDataFrame`) para
-#' identificar o tipo esperado de cada coluna e aplica a conversao adequada
-#' no `dataFrame` de entrada
-#'
-#' Essa etapa e essencial porque operacoes numericas e combinacoes via
-#' `rbindlist()` promovem automaticamente tipos para `double`, fazendo com
-#' que variaveis originalmente inteiras, fatoriais ou logicas percam sua
-#' classe
-#'
-#' Conversoes aplicadas:
-#' - `factor`: reconstrucao com os niveis originais
-#' - `integer`: arredondamento seguido de coercao para inteiro
-#' - `numeric`: mantido como numerico
-#' - `logical`: coercao para logico
-#' - `Date`: reconstrucao a partir de origem unix
-#' - `POSIXct`: reconstrucao preservando timezone
-#' - `character`: coercao para string
-#'
-#' @param dataFrame Data.frame contendo os dados transformados que precisam
-#'   ter os tipos restaurados
-#' @param templateDataFrame Data.frame de referencia contendo os tipos
-#'   originais esperados para cada coluna
-#'
-#' @return Um data.frame com os mesmos dados de `dataFrame`, mas com os tipos
-#'   restaurados conforme `templateDataFrame`
-#'
-#' @details
-#' A funcao atua apenas nas colunas comuns entre `dataFrame` e
-#' `templateDataFrame`. Colunas extras sao ignoradas
-#'
-#' Para colunas inteiras, e aplicado `round()` antes da conversao para evitar
-#' perda de informacao oriunda de interpolacoes numericas
-#'
-#' Para fatores, os niveis originais sao preservados, evitando inconsistencias
-#' em pipelines de modelagem
-#'
-#' @keywords internal
+#' @noRd
 RestoreOriginalColumnTypes <- function(dataFrame, templateDataFrame) {
 
   commonNames <- intersect(names(templateDataFrame), names(dataFrame))
