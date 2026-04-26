@@ -1124,7 +1124,7 @@ InterpolateSyntheticPoints <- function(
     numThreads = as.integer(max(1L, nThreads))
   )
 
-  synRaw <- RestoreTypesCpp(
+  RestoreTypesCpp(
     synMat = synRaw,
     binCols = ResolveColumnIndices(binaryNames, predictorNames),
     intCols = ResolveColumnIndices(integerNames, predictorNames),
