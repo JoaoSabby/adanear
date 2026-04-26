@@ -126,7 +126,12 @@ step_adanear <- function(recipe,
 
   nThreads <- if (is.null(nThreads)) DefaultThreadCount() else nThreads
 
-  recipes::recipes_pkg_check(required_pkgs.step_adanear(NULL))
+  # FIX PADRAO-02: em vez de passar NULL para required_pkgs.step_adanear(),
+  # constroi um objeto dummy que herda a classe correta. Isso garante que o
+  # despacho S3 seja semanticamente valido e resistente a atualizacoes futuras
+  # da API do recipes que possam checar a classe do argumento de entrada.
+  dummy_step <- structure(list(), class = c("step_adanear", "step"))
+  recipes::recipes_pkg_check(required_pkgs.step_adanear(dummy_step))
 
   ValidateSingleNumber(increaseRatio, "increaseRatio", minValue = 0)
   ValidateSingleNumber(neighborsAdasyn, "neighborsAdasyn", minValue = 1, integerish = TRUE)
