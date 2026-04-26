@@ -13,19 +13,13 @@ permissions:
   contents: read
 
 jobs:
-  R-CMD-check:
-    runs-on: ${{ matrix.config.os }}
-    name: ${{ matrix.config.os }} (R ${{ matrix.config.r }})
-
+  build:
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        config:
-          - { os: ubuntu-latest,  r: '4.1.1' }
-          - { os: ubuntu-latest,  r: 'release' }
-          - { os: macos-latest,   r: 'release' }
-          - { os: windows-latest, r: 'release' }
-          - { os: ubuntu-latest,  r: 'devel', http-user-agent: 'release' }
+        os: [ubuntu-latest, macos-latest]
+        r-version: ['4.1.1', '4.3.3', '4.4.0']
 
     steps:
       - uses: actions/checkout@v4

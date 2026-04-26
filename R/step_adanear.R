@@ -36,18 +36,14 @@
 #' @param ef Inteiro positivo. Parametro `ef` repassado ao
 #'   `RcppHNSW::hnsw_build()` e ao `RcppHNSW::hnsw_search()`
 #' @param m Inteiro positivo. Parametro `M` do grafo HNSW
-#' @param nThreads Inteiro positivo ou `NULL`. Numero de threads usado nas
-#'   rotinas de HNSW e RcppParallel. Quando `NULL` (padrao), usa
-#'   `DefaultThreadCount()` que respeita limites de CPU do ambiente e reserva
-#'   margem para evitar nested parallelism agressivo. Para garantir seguranca
-#'   em pipelines paralelos (ex.: `tune::tune_grid()`), defina explicitamente
-#'   `nThreads = 1L`
+#' @param nThreads Inteiro positivo. Numero de threads usado nas rotinas de
+#'   HNSW e RcppParallel. Default: metade dos nucleos detectados menos um,
+#'   minimo 1. Em ambientes de CI ou pipelines paralelos externos, prefira
+#'   passar `nThreads = 1L` explicitamente.
 #' @param majorityFraction Valor numerico em `(0, 1]`. Fracao da classe
 #'   majoritaria usada para estimar a dificuldade do ADASYN
 #' @param seed Inteiro nao negativo ou `NULL`. Semente local usada nas partes
-#'   aleatorias do step. Quando `NULL` (padrao), o step usa o estado global de
-#'   RNG do R (nao fixa uma semente interna). Para garantir reprodutibilidade
-#'   estrita entre runs, defina explicitamente, ex.: `seed = 42L`
+#'   aleatorias do step. Quando `NULL`, nenhuma semente e fixada.
 #' @param means Medias por coluna usadas na normalizacao. E preenchido no
 #'   `prep()`
 #' @param sds Desvios padrao por coluna usados na normalizacao. E preenchido no
@@ -99,7 +95,19 @@
 #'   )
 #' }
 #'
-#' @export
+
+#' @keywords internal
+#' @noRd
+DefaultThreadCount <- function() {
+  detectedCores <- as.integer(parallel::detectCores() / 2L)
+
+  if (length(detectedCores) != 1L || is.na(detectedCores) || detectedCores < 2L) {
+    return(1L)
+  }
+
+  as.integer(detectedCores - 1L)
+}
+
 step_adanear <- function(recipe,
                          ...,
                          role = NA,
@@ -165,7 +173,7 @@ step_adanear <- function(recipe,
       m = as.integer(m),
       nThreads = as.integer(max(1L, nThreads)),
       majorityFraction = majorityFraction,
-      seed = seedStored,
+      seed = if (is.null(seed)) NA_integer_ else as.integer(seed),
       means = means,
       sds = sds,
       binaryNames = binaryNames,
@@ -360,7 +368,7 @@ print.step_adanear <- function(x, width = max(20, getOption("width") - 30), ...)
       x$m,
       x$nThreads,
       x$majorityFraction,
-      seedLabel
+      if (is.na(x$seed)) "NULL" else as.character(x$seed)
     )
   )
   invisible(x)
@@ -478,10 +486,6 @@ ResolveSamplingColumn <- function(terms, training, info) {
   selected <- recipes::recipes_eval_select(terms, training, info)
   selectedNames <- names(selected)
 
-  # FIX PADRAO-03: removido o fallback posicional fragil que usava
-  # unname(selected) como indice de colnames(). O contrato de
-  # recipes_eval_select() garante nomes quando ha selecao valida.
-  # Se nao ha nomes, a selecao falhou e devemos abortar imediatamente.
   if (length(selectedNames) != 1L) {
     rlang::abort("step_adanear() requer que `...` selecione exatamente uma coluna fator binaria.")
   }
@@ -841,13 +845,23 @@ BuildHnswIndex <- function(xMatrix, ef, m, nThreads) {
     M = as.integer(m),
     ef = as.integer(ef),
     n_threads = as.integer(max(1L, nThreads)),
-    grain_size = safeGrain,
+    grain_size = max(1000L, max(1L, as.integer(nrow(xMatrix) / (nThreads * 4L)))),
     byrow = TRUE,
     verbose = FALSE
   )
 }
 
-#' @noRd
+#' Executa uma consulta HNSW e normaliza a saida
+#'
+#' @param index Objeto retornado por `BuildHnswIndex()`
+#' @param queryMatrix Matriz de consulta
+#' @param neighbors Quantidade de vizinhos desejada
+#' @param ef Parametro `ef` da busca
+#' @param nThreads Numero de threads
+#'
+#' @return Matriz inteira `nConsulta x k` com indices 1-based
+#'
+#' @keywords internal
 QueryHnswIndex <- function(index, queryMatrix, neighbors, ef, nThreads) {
   if (!is.matrix(queryMatrix)) {
     rlang::abort("QueryHnswIndex() espera uma matriz de consulta.")
@@ -881,7 +895,7 @@ QueryHnswIndex <- function(index, queryMatrix, neighbors, ef, nThreads) {
     k = as.integer(neighbors),
     ef = as.integer(ef),
     n_threads = as.integer(max(1L, nThreads)),
-    grain_size = safeGrain,
+    grain_size = max(1000L, max(1L, as.integer(nrow(queryMatrix) / (nThreads * 4L)))),
     byrow = TRUE
   )
 
@@ -1093,7 +1107,22 @@ ResolveColumnIndices <- function(targetNames, predictorNames) {
   as.integer(idx - 1L)
 }
 
-#' @noRd
+#' Interpola sinteticos no espaco normalizado e restaura tipos
+#'
+#' @param minMat Matriz normalizada contendo apenas a minoria
+#' @param anchorLocal Vetor 1-based de ancoras
+#' @param neighborLocal Vetor 1-based de vizinhos escolhidos
+#' @param means Medias da normalizacao
+#' @param sds Desvios da normalizacao
+#' @param binaryNames Nomes de colunas binarias
+#' @param integerNames Nomes de colunas inteiras
+#' @param nonNegativeIntegerNames Nomes de colunas inteiras nao negativas
+#' @param predictorNames Nomes de todos os preditores
+#' @param nThreads Numero de threads
+#'
+#' @return Matriz numerica com os sinteticos na escala original
+#'
+#' @keywords internal
 InterpolateSyntheticPoints <- function(
     minMat,
     anchorLocal,
@@ -1124,7 +1153,7 @@ InterpolateSyntheticPoints <- function(
     numThreads = as.integer(max(1L, nThreads))
   )
 
-  RestoreTypesCpp(
+  synRaw <- RestoreTypesCpp(
     synMat = synRaw,
     binCols = ResolveColumnIndices(binaryNames, predictorNames),
     intCols = ResolveColumnIndices(integerNames, predictorNames),
@@ -1250,7 +1279,15 @@ GenerateAdasynRows <- function(dataFrame,
   )
 }
 
-#' @noRd
+#' Normaliza a saida de distancias do HNSW
+#'
+#' @param searchResult Lista retornada por `RcppHNSW::hnsw_search()`
+#' @param expectedRows Numero esperado de linhas
+#' @param nThreads Numero de threads
+#'
+#' @return Vetor numerico com uma distancia media por linha consultada
+#'
+#' @keywords internal
 ExtractDistanceVector <- function(searchResult, expectedRows, nThreads) {
   if (is.null(searchResult$dist)) {
     rlang::abort("RcppHNSW::hnsw_search() nao retornou distancias.")
@@ -1308,12 +1345,16 @@ SelectNearMissRows <- function(dataFrame,
 
   indexMin <- BuildHnswIndex(xNorm[minorityIdx, , drop = FALSE], ef, m, nThreads)
 
-  searchResult <- QueryHnswIndexWithDist(
-    index = indexMin,
-    queryMatrix = xNorm[majorityIdx, , drop = FALSE],
-    neighbors = min(neighborsNearMiss, nMinority),
+  majorityMatrix <- xNorm[majorityIdx, , drop = FALSE]
+
+  searchResult <- RcppHNSW::hnsw_search(
+    X = majorityMatrix,
+    ann = indexMin,
+    k = min(neighborsNearMiss, nMinority),
     ef = ef,
-    nThreads = nThreads
+    n_threads = as.integer(max(1L, nThreads)),
+    grain_size = max(1000L, max(1L, as.integer(nrow(majorityMatrix) / (nThreads * 4L)))),
+    byrow = TRUE
   )
 
   avgDist <- ExtractDistanceVector(
@@ -1370,26 +1411,55 @@ ValidateSingleNumber <- function(
   invisible(TRUE)
 }
 
-#' @noRd
-ValidateSeedSetting <- function(seed) {
-  if (length(seed) != 1L) {
-    rlang::abort("`seed` precisa ser escalar ou NA_integer_.")
-  }
-
-  if (is.na(seed)) {
-    return(invisible(TRUE))
-  }
-
-  ValidateSingleNumber(seed, "seed", minValue = 0, integerish = TRUE)
-  invisible(TRUE)
-}
-
-#' @noRd
+#' Restaura os tipos originais das colunas apos transformacoes numericas
+#'
+#' Funcao utilitaria para restaurar os tipos originais das colunas de um
+#' data.frame apos operacoes que convertem tudo para numerico, como
+#' normalizacao, interpolacao (ADASYN) e concatenacao de dados sinteticos
+#'
+#' A funcao utiliza um data.frame de referencia (`templateDataFrame`) para
+#' identificar o tipo esperado de cada coluna e aplica a conversao adequada
+#' no `dataFrame` de entrada
+#'
+#' Essa etapa e essencial porque operacoes numericas e combinacoes via
+#' `rbindlist()` promovem automaticamente tipos para `double`, fazendo com
+#' que variaveis originalmente inteiras, fatoriais ou logicas percam sua
+#' classe
+#'
+#' Conversoes aplicadas:
+#' - `factor`: reconstrucao com os niveis originais
+#' - `integer`: arredondamento seguido de coercao para inteiro
+#' - `numeric`: mantido como numerico
+#' - `logical`: coercao para logico
+#' - `Date`: reconstrucao a partir de origem unix
+#' - `POSIXct`: reconstrucao preservando timezone
+#' - `character`: coercao para string
+#'
+#' @param dataFrame Data.frame contendo os dados transformados que precisam
+#'   ter os tipos restaurados
+#' @param templateDataFrame Data.frame de referencia contendo os tipos
+#'   originais esperados para cada coluna
+#'
+#' @return Um data.frame com os mesmos dados de `dataFrame`, mas com os tipos
+#'   restaurados conforme `templateDataFrame`
+#'
+#' @details
+#' A funcao atua apenas nas colunas comuns entre `dataFrame` e
+#' `templateDataFrame`. Colunas extras sao ignoradas
+#'
+#' Para colunas inteiras, e aplicado `round()` antes da conversao para evitar
+#' perda de informacao oriunda de interpolacoes numericas
+#'
+#' Para fatores, os niveis originais sao preservados, evitando inconsistencias
+#' em pipelines de modelagem
+#'
+#' @keywords internal
 RestoreOriginalColumnTypes <- function(dataFrame, templateDataFrame) {
 
   commonNames <- intersect(names(templateDataFrame), names(dataFrame))
 
   for (columnName in commonNames) {
+
     templateColumn <- templateDataFrame[[columnName]]
     currentColumn  <- dataFrame[[columnName]]
 
