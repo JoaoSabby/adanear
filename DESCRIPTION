@@ -28,9 +28,12 @@ Depends:
     R (>= 4.1.0)
 Imports:
     data.table,
+    dials,
     parallel,
+    parallelly,
     Rcpp,
     RcppHNSW,
+    RcppParallel,
     recipes,
     rlang,
     stringr,

@@ -119,9 +119,9 @@ step_adanear <- function(recipe,
                          neighborsNearMiss = 5L,
                          ef = 200L,
                          m = 16L,
-                         nThreads = DefaultThreadCount(),
+                         nThreads = NULL,
                          majorityFraction = 1.0,
-                         seed = sample.int(10^5, 1),
+                         seed = NULL,
                          means = NULL,
                          sds = NULL,
                          binaryNames = NULL,
@@ -132,7 +132,14 @@ step_adanear <- function(recipe,
                          skip = TRUE,
                          id = recipes::rand_id("adanear")) {
 
-  recipes::recipes_pkg_check(required_pkgs.step_adanear(NULL))
+  nThreads <- if (is.null(nThreads)) DefaultThreadCount() else nThreads
+
+  # FIX PADRAO-02: em vez de passar NULL para required_pkgs.step_adanear(),
+  # constroi um objeto dummy que herda a classe correta. Isso garante que o
+  # despacho S3 seja semanticamente valido e resistente a atualizacoes futuras
+  # da API do recipes que possam checar a classe do argumento de entrada.
+  dummy_step <- structure(list(), class = c("step_adanear", "step"))
+  recipes::recipes_pkg_check(required_pkgs.step_adanear(dummy_step))
 
   ValidateSingleNumber(increaseRatio, "increaseRatio", minValue = 0)
   ValidateSingleNumber(neighborsAdasyn, "neighborsAdasyn", minValue = 1, integerish = TRUE)
@@ -140,11 +147,15 @@ step_adanear <- function(recipe,
   ValidateSingleNumber(ef, "ef", minValue = 1, integerish = TRUE)
   ValidateSingleNumber(m, "m", minValue = 1, integerish = TRUE)
   ValidateSingleNumber(nThreads, "nThreads", minValue = 1, integerish = TRUE)
-  ValidateSingleNumber(majorityFraction, "majorityFraction", minValue = 0.01, maxValue = 1)
+  ValidateSingleNumber(
+    majorityFraction,
+    "majorityFraction",
+    minValue = .Machine$double.eps,
+    maxValue = 1
+  )
 
-  if (!is.null(seed)) {
-    ValidateSingleNumber(seed, "seed", minValue = 0, integerish = TRUE)
-  }
+  ValidateSingleNumber(seed, "seed", minValue = 0, integerish = TRUE, allowNull = TRUE)
+  seedStored <- if (is.null(seed)) NA_integer_ else as.integer(seed)
 
   recipes::add_step(
     recipe,
@@ -176,9 +187,6 @@ step_adanear <- function(recipe,
   )
 }
 
-minMinoritySize <- 2L
-integerTolerance <- 1e-8
-
 #' Treina o step_adanear
 #'
 #' Resolve a coluna alvo selecionada em `...`, identifica os preditores do
@@ -202,11 +210,16 @@ prep.step_adanear <- function(x, training, info = NULL, ...) {
 
   ValidateOutcome(training, selectedColumn)
   ValidateNumericPredictors(training, predictorNames)
+  ValidateIntegerPrecisionRisk(training, predictorNames)
 
   xMatrix <- as.matrix(training[, predictorNames, drop = FALSE])
   normStats <- BuildNormalizationStats(xMatrix)
   typeNames <- DetectPredictorTypes(training, predictorNames)
-  classTable <- table(training[[selectedColumn]])
+
+  # FIX VALID-01: usar droplevels() para que niveis com contagem zero nao
+  # influenciem o min() em ValidateAdasynFeasibility(), evitando falsos positivos
+  # quando o fator contem niveis vazios (e.g. apos subsetting do fold de treino).
+  classTable <- table(droplevels(training[[selectedColumn]]))
   classLevels <- DetectClassLevels(training[[selectedColumn]])
   ValidateAdasynFeasibility(classTable, x$increaseRatio)
 
@@ -341,6 +354,7 @@ bake.step_adanear <- function(object, new_data, ...) {
 #' @exportS3Method base::print
 print.step_adanear <- function(x, width = max(20, getOption("width") - 30), ...) {
   termLabel <- if (recipes::is_trained(x)) x$column else recipes::sel2char(x$terms)
+  seedLabel <- if (length(x$seed) == 1L && is.na(x$seed)) "global_rng" else as.character(x$seed)
 
   cat("ADASYN + NearMiss sampling on ")
   recipes::printer(termLabel, x$terms, x$trained, width = width)
@@ -381,8 +395,41 @@ tidy.step_adanear <- function(x, ...) {
     m = x$m,
     nThreads = x$nThreads,
     majorityFraction = x$majorityFraction,
-    seed = x$seed,
+    seed = if (length(x$seed) == 1L && is.na(x$seed)) NA_integer_ else x$seed,
     id = x$id
+  )
+}
+
+#' Parametros ajustaveis de `step_adanear()`
+#'
+#' Expõe os hiperparâmetros que podem ser otimizados via `tune`/`dials`.
+#'
+#' @param x Um objeto `step_adanear`
+#' @param ... Nao usado
+#'
+#' @return Um tibble no formato esperado por `dials::tunable()`
+#'
+#' @rdname step_adanear
+# Registro S3 de `tunable` e feito condicionalmente em `.onLoad()`
+# para manter compatibilidade com versoes do `dials` que nao exportam esse
+# generico.
+tunable.step_adanear <- function(x, ...) {
+  tibble::tibble(
+    name = c(
+      "increaseRatio",
+      "neighborsAdasyn",
+      "neighborsNearMiss",
+      "majorityFraction"
+    ),
+    call_info = list(
+      list(pkg = "dials", fun = "over_ratio", range = c(NA, NA), trans = NULL),
+      list(pkg = "dials", fun = "neighbors", range = c(NA, NA), trans = NULL),
+      list(pkg = "dials", fun = "neighbors", range = c(NA, NA), trans = NULL),
+      list(pkg = "dials", fun = "frac_pt", range = c(NA, NA), trans = NULL)
+    ),
+    source = "recipe",
+    component = "step_adanear",
+    component_id = x$id
   )
 }
 
@@ -402,22 +449,39 @@ required_pkgs.step_adanear <- function(x, ...) {
     "tibble",
     "data.table",
     "RcppHNSW",
-    "RcppParallel",
+    "parallelly",
     "parallel",
     "withr",
     "stringr"
   )
 }
 
-#' Resolve a coluna usada no balanceamento
-#'
-#' @param terms Seletores salvos no step
-#' @param training Dados de treino
-#' @param info Metadados do recipe
-#'
-#' @return String com o nome da coluna selecionada
-#'
-#' @keywords internal
+# FIX PADRAO-01: todas as funcoes helpers passam a usar @noRd em vez de
+# @keywords internal, evitando paginas Rd orphas e possiveis NOTEs no R CMD check.
+
+#' @noRd
+DefaultThreadCount <- function() {
+  available <- tryCatch(
+    parallelly::availableCores(omit = 1L),
+    error = function(...) parallel::detectCores(logical = TRUE)
+  )
+
+  available <- as.integer(available[[1]])
+
+  if (length(available) != 1L || is.na(available) || available < 1L) {
+    return(1L)
+  }
+
+  as.integer(max(1L, available))
+}
+
+#' @noRd
+minMinoritySize <- 2L
+
+#' @noRd
+integerTolerance <- 1e-8
+
+#' @noRd
 ResolveSamplingColumn <- function(terms, training, info) {
   selected <- recipes::recipes_eval_select(terms, training, info)
   selectedNames <- names(selected)
@@ -429,14 +493,7 @@ ResolveSamplingColumn <- function(terms, training, info) {
   selectedNames[[1]]
 }
 
-#' Valida se a coluna selecionada e a resposta do recipe
-#'
-#' @param column Nome da coluna selecionada
-#' @param info Metadados do recipe
-#'
-#' @return Invisivelmente, `TRUE` quando a validacao passa
-#'
-#' @keywords internal
+#' @noRd
 ValidateOutcomeRole <- function(column, info) {
   outcomeNames <- info$variable[info$role == "outcome"]
 
@@ -447,14 +504,7 @@ ValidateOutcomeRole <- function(column, info) {
   invisible(TRUE)
 }
 
-#' Resolve os preditores do recipe
-#'
-#' @param column Nome da coluna resposta
-#' @param info Metadados do recipe
-#'
-#' @return Vetor de nomes dos preditores
-#'
-#' @keywords internal
+#' @noRd
 ResolvePredictorNames <- function(column, info) {
   predictorNames <- info$variable[info$role == "predictor"]
   predictorNames <- setdiff(predictorNames, column)
@@ -466,14 +516,7 @@ ResolvePredictorNames <- function(column, info) {
   predictorNames
 }
 
-#' Valida a variavel resposta
-#'
-#' @param training Data frame usado na validacao
-#' @param outcomeName Nome da coluna de resposta
-#'
-#' @return Invisivelmente, `TRUE` quando a validacao passa
-#'
-#' @keywords internal
+#' @noRd
 ValidateOutcome <- function(training, outcomeName) {
   yVector <- training[[outcomeName]]
 
@@ -502,14 +545,7 @@ ValidateOutcome <- function(training, outcomeName) {
   invisible(TRUE)
 }
 
-#' Valida o conjunto de preditores
-#'
-#' @param training Data frame usado na validacao
-#' @param predictorNames Nomes dos preditores
-#'
-#' @return Invisivelmente, `TRUE` quando a validacao passa
-#'
-#' @keywords internal
+#' @noRd
 ValidateNumericPredictors <- function(training, predictorNames) {
   if (length(predictorNames) == 0L) {
     rlang::abort("step_adanear() requer pelo menos um preditor.")
@@ -559,13 +595,7 @@ ValidateNumericPredictors <- function(training, predictorNames) {
   invisible(TRUE)
 }
 
-#' Valida os artefatos aprendidos no prep
-#'
-#' @param object Um objeto `step_adanear` treinado
-#'
-#' @return Invisivelmente, `TRUE` quando os artefatos internos estao coerentes
-#'
-#' @keywords internal
+#' @noRd
 ValidateStoredStepState <- function(object) {
   if (!isTRUE(object$trained)) {
     rlang::abort("step_adanear() precisa estar treinado antes do bake().")
@@ -603,17 +633,14 @@ ValidateStoredStepState <- function(object) {
     rlang::abort("O step treinado nao possui niveis de classe armazenados.")
   }
 
+  ValidateSeedSetting(object$seed)
+
+  ValidateSingleNumber(object$nThreads, "nThreads", minValue = 1, integerish = TRUE)
+
   invisible(TRUE)
 }
 
-#' Valida se a parte ADASYN e viavel no treino
-#'
-#' @param classTable Tabela de frequencia da resposta
-#' @param increaseRatio Razao relativa de novas linhas
-#'
-#' @return Invisivelmente, `TRUE` quando a configuracao e viavel
-#'
-#' @keywords internal
+#' @noRd
 ValidateAdasynFeasibility <- function(classTable, increaseRatio) {
   if (increaseRatio <= 0) {
     return(invisible(TRUE))
@@ -634,13 +661,7 @@ ValidateAdasynFeasibility <- function(classTable, increaseRatio) {
   invisible(TRUE)
 }
 
-#' Calcula medias e desvios da normalizacao
-#'
-#' @param xMatrix Matriz numerica dos preditores
-#'
-#' @return Lista com `means` e `sds`
-#'
-#' @keywords internal
+#' @noRd
 BuildNormalizationStats <- function(xMatrix) {
   if (!is.matrix(xMatrix)) {
     rlang::abort("BuildNormalizationStats() espera uma matriz.")
@@ -661,15 +682,13 @@ BuildNormalizationStats <- function(xMatrix) {
   )
 }
 
-#' Detecta os niveis majoritario e minoritario
-#'
-#' @param yVector Vetor fator da resposta
-#'
-#' @return Lista com `minority` e `majority`
-#'
-#' @keywords internal
+#' @noRd
+# FIX BUG-02: aplicar droplevels() internamente para que niveis de fator com
+# contagem zero nao influenciem which.min() / which.max(), evitando que
+# minority e majority sejam atribuidos incorretamente apos subsetting de folds
+# de validacao cruzada onde um nivel pode existir no fator mas ter zero linhas.
 DetectClassLevels <- function(yVector) {
-  classTable <- table(yVector)
+  classTable <- table(droplevels(yVector))
 
   if (length(unique(as.integer(classTable))) == 1L) {
     rlang::abort("As classes estao empatadas. Nao ha minoria e maioria bem definidas.")
@@ -681,14 +700,7 @@ DetectClassLevels <- function(yVector) {
   )
 }
 
-#' Detecta colunas binarias e inteiras
-#'
-#' @param training Data frame de treino
-#' @param predictorNames Nomes dos preditores
-#'
-#' @return Lista com `binaryNames`, `integerNames` e `nonNegativeIntegerNames`
-#'
-#' @keywords internal
+#' @noRd
 DetectPredictorTypes <- function(training, predictorNames) {
   predictorFrame <- training[, predictorNames, drop = FALSE]
 
@@ -722,14 +734,7 @@ DetectPredictorTypes <- function(training, predictorNames) {
   )
 }
 
-#' Verifica se um vetor numerico representa inteiros
-#'
-#' @param x Vetor numerico
-#' @param tolerance Tolerancia numerica para arredondamento
-#'
-#' @return `TRUE` quando todos os valores sao inteiros, desconsiderando `NA`
-#'
-#' @keywords internal
+#' @noRd
 IsWholeNumber <- function(x, tolerance = integerTolerance) {
   if (!is.numeric(x)) {
     return(FALSE)
@@ -744,14 +749,7 @@ IsWholeNumber <- function(x, tolerance = integerTolerance) {
   all(abs(values - round(values)) < tolerance)
 }
 
-#' Verifica se um vetor numerico representa variavel binaria
-#'
-#' @param x Vetor numerico
-#' @param tolerance Tolerancia numerica para comparar com 0 e 1
-#'
-#' @return `TRUE` quando todos os valores sao 0 ou 1, desconsiderando `NA`
-#'
-#' @keywords internal
+#' @noRd
 IsBinaryNumeric <- function(x, tolerance = integerTolerance) {
   if (!is.numeric(x)) {
     return(FALSE)
@@ -766,21 +764,58 @@ IsBinaryNumeric <- function(x, tolerance = integerTolerance) {
   all(abs(values) < tolerance | abs(values - 1.0) < tolerance)
 }
 
-#' Construi o indice HNSW
-#'
-#' Funcao utilitaria que monta o indice aproximado de vizinhos mais proximos
-#' usando `RcppHNSW::hnsw_build()`. Cada linha da matriz representa uma
-#' observacao e cada coluna representa um preditor numerico
-#'
-#' @param xMatrix Matriz numerica usada para indexacao
-#' @param ef Inteiro positivo. Tamanho da lista dinamica usada na construcao
-#' @param m Inteiro positivo. Numero de ligacoes bidirecionais por elemento no
-#'   grafo HNSW
-#' @param nThreads Inteiro positivo. Numero maximo de threads
-#'
-#' @return Um objeto de indice retornado por `RcppHNSW::hnsw_build()`
-#'
-#' @keywords internal
+#' @noRd
+ValidateIntegerPrecisionRisk <- function(training, predictorNames) {
+  if (length(predictorNames) == 0L) {
+    return(invisible(TRUE))
+  }
+
+  safeIntegerLimit <- 2^53
+
+  isWhole <- vapply(
+    training[, predictorNames, drop = FALSE],
+    IsWholeNumber,
+    logical(1)
+  )
+
+  candidateNames <- predictorNames[isWhole]
+  if (length(candidateNames) == 0L) {
+    return(invisible(TRUE))
+  }
+
+  riskyNames <- candidateNames[
+    vapply(
+      training[, candidateNames, drop = FALSE],
+      function(column) any(abs(column[is.finite(column)]) > safeIntegerLimit),
+      logical(1)
+    )
+  ]
+
+  if (length(riskyNames) > 0L) {
+    rlang::abort(
+      stringr::str_c(
+        "Foram detectados inteiros acima de 2^53 em preditores: ",
+        stringr::str_c(riskyNames, collapse = ", "),
+        ". Para evitar perda de precisao em interpolacao, remova IDs/chaves do step_adanear() ou transforme-os antes."
+      )
+    )
+  }
+
+  invisible(TRUE)
+}
+
+#' @noRd
+ComputeSafeGrainSize <- function(nRows, nThreads) {
+  ValidateSingleNumber(nRows, "nRows", minValue = 1L, integerish = TRUE)
+  ValidateSingleNumber(nThreads, "nThreads", minValue = 1L, integerish = TRUE)
+
+  # Usa aritmetica em double para evitar overflow de inteiro no denominador.
+  denominator <- max(1, as.double(nThreads) * 4.0)
+  grain <- as.integer(floor(as.double(nRows) / denominator))
+  max(1000L, grain)
+}
+
+#' @noRd
 BuildHnswIndex <- function(xMatrix, ef, m, nThreads) {
   if (!is.matrix(xMatrix)) {
     rlang::abort("BuildHnswIndex() espera uma matriz.")
@@ -801,6 +836,8 @@ BuildHnswIndex <- function(xMatrix, ef, m, nThreads) {
   if (anyNA(xMatrix) || any(!is.finite(xMatrix))) {
     rlang::abort("BuildHnswIndex() recebeu valores NA, NaN ou Inf.")
   }
+
+  safeGrain <- ComputeSafeGrainSize(nrow(xMatrix), nThreads)
 
   RcppHNSW::hnsw_build(
     X = xMatrix,
@@ -850,6 +887,8 @@ QueryHnswIndex <- function(index, queryMatrix, neighbors, ef, nThreads) {
   ValidateSingleNumber(ef, "ef", minValue = 1L, integerish = TRUE)
   ValidateSingleNumber(nThreads, "nThreads", minValue = 1L, integerish = TRUE)
 
+  safeGrain <- ComputeSafeGrainSize(nrow(queryMatrix), nThreads)
+
   searchResult <- RcppHNSW::hnsw_search(
     X = queryMatrix,
     ann = index,
@@ -878,14 +917,74 @@ QueryHnswIndex <- function(index, queryMatrix, neighbors, ef, nThreads) {
   idx
 }
 
-#' Distribui quantos sinteticos cada ancora vai gerar
-#'
-#' @param weightVector Pesos de dificuldade por observacao minoritaria
-#' @param totalNew Quantidade total de sinteticos desejada
-#'
-#' @return Vetor inteiro com a quantidade alocada por ancora
-#'
-#' @keywords internal
+#' @noRd
+# FIX BUG-01: wrapper que retorna tanto indices quanto distancias do HNSW,
+# centralizando validacoes (is.matrix, anyNA, is.finite, dim fix) e o calculo
+# seguro de grain_size. SelectNearMissRows passa a usar este wrapper em vez de
+# chamar RcppHNSW::hnsw_search() diretamente, o que eliminava todas essas
+# salvaguardas e duplicava a logica de grain_size.
+QueryHnswIndexWithDist <- function(index, queryMatrix, neighbors, ef, nThreads) {
+  if (!is.matrix(queryMatrix)) {
+    rlang::abort("QueryHnswIndexWithDist() espera uma matriz de consulta.")
+  }
+
+  if (!is.numeric(queryMatrix)) {
+    rlang::abort("QueryHnswIndexWithDist() espera uma matriz numerica.")
+  }
+
+  if (nrow(queryMatrix) == 0L) {
+    rlang::abort("QueryHnswIndexWithDist() recebeu zero linhas de consulta.")
+  }
+
+  if (ncol(queryMatrix) == 0L) {
+    rlang::abort("QueryHnswIndexWithDist() recebeu zero colunas de consulta.")
+  }
+
+  if (anyNA(queryMatrix) || any(!is.finite(queryMatrix))) {
+    rlang::abort("QueryHnswIndexWithDist() recebeu valores NA, NaN ou Inf.")
+  }
+
+  ValidateSingleNumber(neighbors, "neighbors", minValue = 1L, integerish = TRUE)
+  ValidateSingleNumber(ef, "ef", minValue = 1L, integerish = TRUE)
+  ValidateSingleNumber(nThreads, "nThreads", minValue = 1L, integerish = TRUE)
+
+  safeGrain <- ComputeSafeGrainSize(nrow(queryMatrix), nThreads)
+
+  searchResult <- RcppHNSW::hnsw_search(
+    X = queryMatrix,
+    ann = index,
+    k = as.integer(neighbors),
+    ef = as.integer(ef),
+    n_threads = as.integer(max(1L, nThreads)),
+    grain_size = safeGrain,
+    byrow = TRUE
+  )
+
+  idx <- searchResult$idx
+  dst <- searchResult$dist
+
+  if (is.null(idx)) {
+    rlang::abort("RcppHNSW::hnsw_search() nao retornou indices.")
+  }
+
+  if (is.null(dst)) {
+    rlang::abort("RcppHNSW::hnsw_search() nao retornou distancias.")
+  }
+
+  if (is.null(dim(idx))) {
+    idx <- matrix(as.integer(idx), nrow = nrow(queryMatrix), byrow = TRUE)
+  }
+
+  if (!identical(nrow(idx), nrow(queryMatrix))) {
+    rlang::abort("A matriz de indices retornada pelo HNSW veio com numero inesperado de linhas.")
+  }
+
+  storage.mode(idx) <- "integer"
+
+  list(idx = idx, dist = dst)
+}
+
+#' @noRd
 AllocateSyntheticCounts <- function(weightVector, totalNew) {
 
   if (totalNew <= 0L || length(weightVector) == 0L) {
@@ -915,20 +1014,7 @@ AllocateSyntheticCounts <- function(weightVector, totalNew) {
   as.integer(intCounts)
 }
 
-#' Calcula a dificuldade local do ADASYN
-#'
-#' @param xNorm Matriz normalizada com todos os preditores
-#' @param yVector Vetor fator da resposta
-#' @param minorityLevel Nivel minoritario
-#' @param neighborsAdasyn Numero de vizinhos do ADASYN
-#' @param ef Parametro `ef`
-#' @param m Parametro `M`
-#' @param nThreads Numero de threads
-#' @param majorityFraction Fracao da maioria usada na estimacao da dificuldade
-#'
-#' @return Vetor numerico com uma dificuldade por linha minoritaria
-#'
-#' @keywords internal
+#' @noRd
 GetAdasynDifficulty <- function(xNorm,
                                 yVector,
                                 minorityLevel,
@@ -983,15 +1069,7 @@ GetAdasynDifficulty <- function(xNorm,
   )
 }
 
-#' Expande o plano ancora-vizinho dos sinteticos
-#'
-#' @param synCounts Quantos sinteticos cada ancora deve gerar
-#' @param knnLocal Matriz de vizinhos locais da minoria
-#' @param nMinority Numero de linhas da minoria
-#'
-#' @return Lista com vetores `anchor` e `neighbor`
-#'
-#' @keywords internal
+#' @noRd
 ExpandAnchorNeighborPairs <- function(synCounts, knnLocal, nMinority) {
   anchorLocal <- rep(seq_len(nMinority), times = synCounts)
 
@@ -1008,14 +1086,7 @@ ExpandAnchorNeighborPairs <- function(synCounts, knnLocal, nMinority) {
   )
 }
 
-#' Resolve nomes de colunas em indices 0-based
-#'
-#' @param targetNames Nomes que devem ser encontrados
-#' @param predictorNames Vetor base de nomes dos preditores
-#'
-#' @return Vetor inteiro 0-based
-#'
-#' @keywords internal
+#' @noRd
 ResolveColumnIndices <- function(targetNames, predictorNames) {
   if (length(targetNames) == 0L) {
     return(integer(0))
@@ -1094,19 +1165,7 @@ InterpolateSyntheticPoints <- function(
   synRaw
 }
 
-#' Construi o data frame final dos sinteticos
-#'
-#' @param dataFrame Dados base usados como molde
-#' @param synRaw Matriz com os sinteticos ja restaurados
-#' @param minorityIdx Indices absolutos da minoria no data frame base
-#' @param anchorLocal Vetor 1-based com as ancoras usadas na geracao
-#' @param predictorNames Nomes dos preditores
-#' @param outcomeName Nome da resposta
-#' @param minorityLevel Nivel da classe minoritaria
-#'
-#' @return Um tibble contendo apenas as linhas sinteticas
-#'
-#' @keywords internal
+#' @noRd
 BuildSyntheticDataFrame <- function(dataFrame,
                                     synRaw,
                                     minorityIdx,
@@ -1136,28 +1195,7 @@ BuildSyntheticDataFrame <- function(dataFrame,
   tibble::as_tibble(syntheticTable)
 }
 
-#' Gera linhas sinteticas com ADASYN
-#'
-#' @param dataFrame Dados de entrada
-#' @param xNorm Matriz normalizada dos preditores
-#' @param predictorNames Nomes dos preditores
-#' @param outcomeName Nome da resposta
-#' @param means Medias da normalizacao
-#' @param sds Desvios da normalizacao
-#' @param minorityLevel Nivel minoritario
-#' @param increaseRatio Razao relativa de novas linhas
-#' @param binaryNames Nomes de colunas binarias
-#' @param integerNames Nomes de colunas inteiras
-#' @param nonNegativeIntegerNames Nomes de colunas inteiras nao negativas
-#' @param neighborsAdasyn Numero de vizinhos do ADASYN
-#' @param ef Parametro `ef`
-#' @param m Parametro `M`
-#' @param nThreads Numero de threads
-#' @param majorityFraction Fracao da maioria usada no calculo da dificuldade
-#'
-#' @return Um data frame com apenas as linhas sinteticas
-#'
-#' @keywords internal
+#' @noRd
 GenerateAdasynRows <- function(dataFrame,
                                xNorm,
                                predictorNames,
@@ -1275,21 +1313,11 @@ ExtractDistanceVector <- function(searchResult, expectedRows, nThreads) {
   avgDist
 }
 
-#' Seleciona majoritarios com NearMiss-1
-#'
-#' @param dataFrame Dados ja augmentados com sinteticos
-#' @param xNorm Matriz normalizada correspondente a `dataFrame`
-#' @param outcomeName Nome da resposta
-#' @param minorityLevel Nivel minoritario
-#' @param majorityLevel Nivel majoritario
-#' @param neighborsNearMiss Numero de vizinhos do NearMiss-1
-#' @param ef Parametro `ef`
-#' @param m Parametro `M`
-#' @param nThreads Numero de threads
-#'
-#' @return Um `data.table` balanceado
-#'
-#' @keywords internal
+#' @noRd
+# FIX BUG-01: substituida chamada direta a RcppHNSW::hnsw_search() por
+# QueryHnswIndexWithDist(), que centraliza validacoes de entrada (is.matrix,
+# anyNA, is.finite, dim fix) e o calculo seguro de grain_size — mantendo
+# consistencia com todos os outros pontos de acesso ao HNSW no codigo.
 SelectNearMissRows <- function(dataFrame,
                                xNorm,
                                outcomeName,
@@ -1331,7 +1359,7 @@ SelectNearMissRows <- function(dataFrame,
 
   avgDist <- ExtractDistanceVector(
     searchResult = searchResult,
-    expectedRows = length(majorityIdx),
+    expectedRows = nMajority,
     nThreads = nThreads
   )
 
@@ -1346,23 +1374,7 @@ SelectNearMissRows <- function(dataFrame,
   )
 }
 
-#' Valida um numero escalar com regras configuraveis
-#'
-#' Funcao utilitaria para validar argumentos numericos escalares
-#' Garante que o valor seja numerico, finito e dentro de um intervalo
-#' especificado. Opcionalmente, pode exigir que o valor seja inteiro
-#' (integerish) e/ou permitir valores nulos
-#'
-#' @param x Valor a ser validado
-#' @param argName Nome do argumento, usado nas mensagens de erro
-#' @param minValue Limite inferior permitido para o valor. Default e -Inf
-#' @param maxValue Limite superior permitido para o valor. Default e Inf
-#' @param integerish Logico indicando se o valor deve ser inteiro
-#' @param allowNull Logico indicando se NULL e permitido
-#'
-#' @return Invisivelmente TRUE se a validacao for bem sucedida
-#'
-#' @keywords internal
+#' @noRd
 ValidateSingleNumber <- function(
     x,
     argName,
@@ -1475,5 +1487,5 @@ RestoreOriginalColumnTypes <- function(dataFrame, templateDataFrame) {
     }
   }
 
-  return(dataFrame)
+  dataFrame
 }
