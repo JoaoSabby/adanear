@@ -5,30 +5,30 @@
 NULL
 
 NormalizeMatrixCpp <- function(x, means, sds, numThreads) {
-    .Call('_sattvaR_NormalizeMatrixCpp', PACKAGE = 'sattvaR', x, means, sds, numThreads)
+    .Call('_adanear_NormalizeMatrixCpp', PACKAGE = 'adanear', x, means, sds, numThreads)
 }
 
 DenormalizeMatrixCpp <- function(x, means, sds, numThreads) {
-    .Call('_sattvaR_DenormalizeMatrixCpp', PACKAGE = 'sattvaR', x, means, sds, numThreads)
+    .Call('_adanear_DenormalizeMatrixCpp', PACKAGE = 'adanear', x, means, sds, numThreads)
 }
 
 AdasynInterpolateCpp <- function(minMat, anchorIdx, neighborIdx, lambdas, numThreads) {
-    .Call('_sattvaR_AdasynInterpolateCpp', PACKAGE = 'sattvaR', minMat, anchorIdx, neighborIdx, lambdas, numThreads)
+    .Call('_adanear_AdasynInterpolateCpp', PACKAGE = 'adanear', minMat, anchorIdx, neighborIdx, lambdas, numThreads)
 }
 
 ComputeDifficultyCpp <- function(knnIdx, minGlobalIdx, yBinary, numThreads) {
-    .Call('_sattvaR_ComputeDifficultyCpp', PACKAGE = 'sattvaR', knnIdx, minGlobalIdx, yBinary, numThreads)
+    .Call('_adanear_ComputeDifficultyCpp', PACKAGE = 'adanear', knnIdx, minGlobalIdx, yBinary, numThreads)
 }
 
 SampleNeighborsCpp <- function(knnLocal, anchorLocalIdx) {
-    .Call('_sattvaR_SampleNeighborsCpp', PACKAGE = 'sattvaR', knnLocal, anchorLocalIdx)
+    .Call('_adanear_SampleNeighborsCpp', PACKAGE = 'adanear', knnLocal, anchorLocalIdx)
 }
 
 RestoreTypesCpp <- function(synMat, binCols, intCols, nnIntCols, numThreads) {
-    invisible(.Call('_sattvaR_RestoreTypesCpp', PACKAGE = 'sattvaR', synMat, binCols, intCols, nnIntCols, numThreads))
+    invisible(.Call('_adanear_RestoreTypesCpp', PACKAGE = 'adanear', synMat, binCols, intCols, nnIntCols, numThreads))
 }
 
 NearMissAvgDistCpp <- function(distMat, numThreads) {
-    .Call('_sattvaR_NearMissAvgDistCpp', PACKAGE = 'sattvaR', distMat, numThreads)
+    .Call('_adanear_NearMissAvgDistCpp', PACKAGE = 'adanear', distMat, numThreads)
 }
 

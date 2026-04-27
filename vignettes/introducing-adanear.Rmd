@@ -1,5 +1,5 @@
 ---
-title: "Introducing `sattvaR`"
+title: "Introducing `adanear`"
 output:
   rmarkdown::html_vignette:
   toc: true
@@ -12,7 +12,7 @@ nocite: |
   @hvitfeldt2025themis
   @kuhn2025tidymodels
 vignette: >
-  %\VignetteIndexEntry{Introducing sattvaR}
+  %\VignetteIndexEntry{Introducing adanear}
   %\VignetteEngine{knitr::rmarkdown}
   \usepackage[utf8]{inputenc}
 ---
@@ -30,7 +30,7 @@ knitr::opts_chunk$set(
 
 # Overview
 
-`sattvaR` provides efficient binary class balancing steps for `recipes` and the broader `tidymodels` ecosystem.
+`adanear` provides efficient binary class balancing steps for `recipes` and the broader `tidymodels` ecosystem.
 
 The first implemented method is `step_adanear()`, a hybrid approach that combines ADASYN style oversampling with NearMiss style undersampling.
 
@@ -142,7 +142,7 @@ Combining them can be useful because ADASYN reinforces underrepresented minority
 
 # Positioning within tidymodels
 
-`sattvaR` was designed to integrate naturally with `recipes`, `workflows`, `parsnip`, `rsample`, and `yardstick`.
+`adanear` was designed to integrate naturally with `recipes`, `workflows`, `parsnip`, `rsample`, and `yardstick`.
 
 The step follows the standard architecture of a custom `recipes` step:
 
@@ -160,7 +160,7 @@ The example below uses `modeldata::two_class_dat()` to illustrate a full binary 
 
 ```{r basic-example}
 library(tidymodels)
-library(sattvaR)
+library(adanear)
 
 set.seed(123)
 
@@ -250,7 +250,7 @@ Since the step operates on distances, its intended usage assumes that the predic
 
 The `themis` package offers separate balancing steps such as `step_adasyn()` and `step_nearmiss()`.
 
-This makes `themis` a natural baseline when evaluating `sattvaR` in a `recipes` based workflow.
+This makes `themis` a natural baseline when evaluating `adanear` in a `recipes` based workflow.
 
 A fair comparison should be made by holding constant:
 
@@ -267,7 +267,7 @@ The code below provides a reproducible benchmark template.
 ```{r benchmark-timing, eval = FALSE}
 library(tidymodels)
 library(themis)
-library(sattvaR)
+library(adanear)
 library(bench)
 
 set.seed(42L)
@@ -293,7 +293,7 @@ recThemis <- recipes::recipe(Class ~ ., data = dadosTreino) |>
   themis::step_nearmiss(Class, under_ratio = 1)
 
 benchResultado <- bench::mark(
-  sattvaR = {
+  adanear = {
     recipes::prep(recSattva, training = dadosTreino) |>
       recipes::bake(new_data = dadosTreino)
   },
@@ -355,9 +355,9 @@ tune::collect_metrics(resThemis)
 
 The comparison with `themis` should be interpreted carefully.
 
-If `sattvaR` is faster on your machine, that should appear in the benchmark statistics returned by `bench::mark()`, especially median runtime and memory allocation.
+If `adanear` is faster on your machine, that should appear in the benchmark statistics returned by `bench::mark()`, especially median runtime and memory allocation.
 
-If `sattvaR` also yields better downstream predictive performance, that should appear in metrics such as PR AUC, ROC AUC, or recall under the same resampling design and model specification.
+If `adanear` also yields better downstream predictive performance, that should appear in metrics such as PR AUC, ROC AUC, or recall under the same resampling design and model specification.
 
 It is good practice not to claim superiority before reproducing these benchmarks in the target environment.
 
@@ -405,7 +405,7 @@ For quick experimentation, the shortest useful workflow is:
 
 ```{r minimal-workflow, eval = FALSE}
 library(tidymodels)
-library(sattvaR)
+library(adanear)
 
 dados <- modeldata::two_class_dat(2000)
 
@@ -430,7 +430,7 @@ tune::fit_resamples(
 
 # Limitations and scope of the first version
 
-This first version of `sattvaR` focuses on a single binary balancing step.
+This first version of `adanear` focuses on a single binary balancing step.
 
 At this stage, the package is intentionally scoped to:
 
