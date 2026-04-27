@@ -1,4 +1,4 @@
-# Auditoria técnica do pacote `sattvaR`
+# Auditoria técnica do pacote `adanear`
 
 ## Escopo da auditoria
 

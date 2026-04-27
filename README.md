@@ -36,7 +36,7 @@ Brito, João B. G. de, Bucco, Guilherme B., Heldt, Rodrigo, Becker, João. L.,  
 ## Installation
 
 ```r
-pak::pak("JoaoSabby/sattvaR")
+pak::pak("JoaoSabby/adanear")
 ```
 
 ## Quick workflow example (tidymodels)
@@ -45,7 +45,7 @@ pak::pak("JoaoSabby/sattvaR")
 rec <- recipes::recipe(TARGET ~ ., data = dados) |>
   recipes::step_dummy(recipes::all_nominal_predictors()) |>
   recipes::update_role(ID, new_role = "id") |>
-  sattvaR::step_adanear(TARGET, increaseRatio = 0.2, neighborsAdasyn = 5, neighborsNearMiss = 5, seed = 42)
+  adanear::step_adanear(TARGET, increaseRatio = 0.2, neighborsAdasyn = 5, neighborsNearMiss = 5, seed = 42)
 
 wf <- workflows::workflow() |>
   workflows::add_recipe(rec) |>
@@ -65,7 +65,7 @@ If you get:
 use `workflows::add_recipe(rec)` (or `recipe = rec`) and **do not** use a custom argument name like `receita = ...`.
 
 
-### If `library(sattvaR)` says `help/sattvaR.rdb is corrupt`
+### If `library(adanear)` says `help/adanear.rdb is corrupt`
 
 This is an installed-library issue (corrupted lazy-load/help database), not a modeling error in `step_adanear()`.
 
@@ -73,16 +73,16 @@ Recommended fix:
 
 ```r
 # 1) unload if attached
-if ("package:sattvaR" %in% search()) detach("package:sattvaR", unload = TRUE, character.only = TRUE)
+if ("package:adanear" %in% search()) detach("package:adanear", unload = TRUE, character.only = TRUE)
 
 # 2) remove installed copy
-remove.packages("sattvaR")
+remove.packages("adanear")
 
 # 3) install again from GitHub
-pak::pak("JoaoSabby/sattvaR")
+pak::pak("JoaoSabby/adanear")
 
 # 4) start a fresh R session and load
-library(sattvaR)
+library(adanear)
 ```
 
 If the error persists, manually delete the old install directory shown in the message and reinstall.
@@ -91,7 +91,7 @@ If the error persists, manually delete the old install directory shown in the me
 rec <- recipes::recipe(TARGET ~ ., data = dados) |>
   recipes::step_dummy(recipes::all_nominal_predictors()) |>
   recipes::update_role(ID, new_role = "id") |>
-  sattvaR::step_adanear(TARGET, increaseRatio = 0.2, neighborsAdasyn = 5, neighborsNearMiss = 5, seed = 42)
+  adanear::step_adanear(TARGET, increaseRatio = 0.2, neighborsAdasyn = 5, neighborsNearMiss = 5, seed = 42)
 
 wf <- workflows::workflow() |>
   workflows::add_recipe(rec) |>

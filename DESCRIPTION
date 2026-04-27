@@ -1,4 +1,4 @@
-Package: sattvaR
+Package: adanear
 Type: Package
 Title: Efficient Binary Class Imbalance Handling via Recipe Steps
 Version: 0.1.0
@@ -60,5 +60,5 @@ Suggests:
     yardstick
 VignetteBuilder: knitr
 Config/testthat/edition: 3
-URL: https://github.com/JoaoSabby/sattvaR
-BugReports: https://github.com/JoaoSabby/sattvaR/issues
+URL: https://github.com/JoaoSabby/adanear
+BugReports: https://github.com/JoaoSabby/adanear/issues

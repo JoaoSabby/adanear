@@ -6,14 +6,14 @@ test_that("validation errors include offending predictor names", {
   )
 
   expect_error(
-    sattvaR:::ValidateNumericPredictors(training, c("x1", "x2")),
+    adanear:::ValidateNumericPredictors(training, c("x1", "x2")),
     "x2"
   )
 })
 
 test_that("adasyn feasibility error is readable", {
   expect_error(
-    sattvaR:::ValidateAdasynFeasibility(c(no = 10L, yes = 1L), increaseRatio = 0.2),
+    adanear:::ValidateAdasynFeasibility(c(no = 10L, yes = 1L), increaseRatio = 0.2),
     "pelo menos"
   )
 })
@@ -86,7 +86,7 @@ test_that("ValidateStoredStepState falha com seed invalido", {
   )
 
   expect_error(
-    sattvaR:::ValidateStoredStepState(obj),
+    adanear:::ValidateStoredStepState(obj),
     "seed"
   )
 })
@@ -105,7 +105,7 @@ test_that("ValidateStoredStepState falha com nThreads invalido", {
   )
 
   expect_error(
-    sattvaR:::ValidateStoredStepState(obj),
+    adanear:::ValidateStoredStepState(obj),
     "nThreads"
   )
 })

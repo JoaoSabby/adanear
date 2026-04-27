@@ -12,7 +12,7 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 
 // NormalizeMatrixCpp
 NumericMatrix NormalizeMatrixCpp(const NumericMatrix& x, const NumericVector& means, const NumericVector& sds, const int numThreads);
-RcppExport SEXP _sattvaR_NormalizeMatrixCpp(SEXP xSEXP, SEXP meansSEXP, SEXP sdsSEXP, SEXP numThreadsSEXP) {
+RcppExport SEXP _adanear_NormalizeMatrixCpp(SEXP xSEXP, SEXP meansSEXP, SEXP sdsSEXP, SEXP numThreadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -26,7 +26,7 @@ END_RCPP
 }
 // DenormalizeMatrixCpp
 NumericMatrix DenormalizeMatrixCpp(const NumericMatrix& x, const NumericVector& means, const NumericVector& sds, const int numThreads);
-RcppExport SEXP _sattvaR_DenormalizeMatrixCpp(SEXP xSEXP, SEXP meansSEXP, SEXP sdsSEXP, SEXP numThreadsSEXP) {
+RcppExport SEXP _adanear_DenormalizeMatrixCpp(SEXP xSEXP, SEXP meansSEXP, SEXP sdsSEXP, SEXP numThreadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -40,7 +40,7 @@ END_RCPP
 }
 // AdasynInterpolateCpp
 NumericMatrix AdasynInterpolateCpp(const NumericMatrix& minMat, const IntegerVector& anchorIdx, const IntegerVector& neighborIdx, const NumericVector& lambdas, const int numThreads);
-RcppExport SEXP _sattvaR_AdasynInterpolateCpp(SEXP minMatSEXP, SEXP anchorIdxSEXP, SEXP neighborIdxSEXP, SEXP lambdasSEXP, SEXP numThreadsSEXP) {
+RcppExport SEXP _adanear_AdasynInterpolateCpp(SEXP minMatSEXP, SEXP anchorIdxSEXP, SEXP neighborIdxSEXP, SEXP lambdasSEXP, SEXP numThreadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -55,7 +55,7 @@ END_RCPP
 }
 // ComputeDifficultyCpp
 NumericVector ComputeDifficultyCpp(const IntegerMatrix& knnIdx, const IntegerVector& minGlobalIdx, const IntegerVector& yBinary, const int numThreads);
-RcppExport SEXP _sattvaR_ComputeDifficultyCpp(SEXP knnIdxSEXP, SEXP minGlobalIdxSEXP, SEXP yBinarySEXP, SEXP numThreadsSEXP) {
+RcppExport SEXP _adanear_ComputeDifficultyCpp(SEXP knnIdxSEXP, SEXP minGlobalIdxSEXP, SEXP yBinarySEXP, SEXP numThreadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -69,7 +69,7 @@ END_RCPP
 }
 // SampleNeighborsCpp
 IntegerVector SampleNeighborsCpp(const IntegerMatrix& knnLocal, const IntegerVector& anchorLocalIdx);
-RcppExport SEXP _sattvaR_SampleNeighborsCpp(SEXP knnLocalSEXP, SEXP anchorLocalIdxSEXP) {
+RcppExport SEXP _adanear_SampleNeighborsCpp(SEXP knnLocalSEXP, SEXP anchorLocalIdxSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -81,7 +81,7 @@ END_RCPP
 }
 // RestoreTypesCpp
 void RestoreTypesCpp(NumericMatrix& synMat, const IntegerVector& binCols, const IntegerVector& intCols, const IntegerVector& nnIntCols, const int numThreads);
-RcppExport SEXP _sattvaR_RestoreTypesCpp(SEXP synMatSEXP, SEXP binColsSEXP, SEXP intColsSEXP, SEXP nnIntColsSEXP, SEXP numThreadsSEXP) {
+RcppExport SEXP _adanear_RestoreTypesCpp(SEXP synMatSEXP, SEXP binColsSEXP, SEXP intColsSEXP, SEXP nnIntColsSEXP, SEXP numThreadsSEXP) {
 BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< NumericMatrix& >::type synMat(synMatSEXP);
@@ -95,7 +95,7 @@ END_RCPP
 }
 // NearMissAvgDistCpp
 NumericVector NearMissAvgDistCpp(const NumericMatrix& distMat, const int numThreads);
-RcppExport SEXP _sattvaR_NearMissAvgDistCpp(SEXP distMatSEXP, SEXP numThreadsSEXP) {
+RcppExport SEXP _adanear_NearMissAvgDistCpp(SEXP distMatSEXP, SEXP numThreadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -107,17 +107,17 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_sattvaR_NormalizeMatrixCpp", (DL_FUNC) &_sattvaR_NormalizeMatrixCpp, 4},
-    {"_sattvaR_DenormalizeMatrixCpp", (DL_FUNC) &_sattvaR_DenormalizeMatrixCpp, 4},
-    {"_sattvaR_AdasynInterpolateCpp", (DL_FUNC) &_sattvaR_AdasynInterpolateCpp, 5},
-    {"_sattvaR_ComputeDifficultyCpp", (DL_FUNC) &_sattvaR_ComputeDifficultyCpp, 4},
-    {"_sattvaR_SampleNeighborsCpp", (DL_FUNC) &_sattvaR_SampleNeighborsCpp, 2},
-    {"_sattvaR_RestoreTypesCpp", (DL_FUNC) &_sattvaR_RestoreTypesCpp, 5},
-    {"_sattvaR_NearMissAvgDistCpp", (DL_FUNC) &_sattvaR_NearMissAvgDistCpp, 2},
+    {"_adanear_NormalizeMatrixCpp", (DL_FUNC) &_adanear_NormalizeMatrixCpp, 4},
+    {"_adanear_DenormalizeMatrixCpp", (DL_FUNC) &_adanear_DenormalizeMatrixCpp, 4},
+    {"_adanear_AdasynInterpolateCpp", (DL_FUNC) &_adanear_AdasynInterpolateCpp, 5},
+    {"_adanear_ComputeDifficultyCpp", (DL_FUNC) &_adanear_ComputeDifficultyCpp, 4},
+    {"_adanear_SampleNeighborsCpp", (DL_FUNC) &_adanear_SampleNeighborsCpp, 2},
+    {"_adanear_RestoreTypesCpp", (DL_FUNC) &_adanear_RestoreTypesCpp, 5},
+    {"_adanear_NearMissAvgDistCpp", (DL_FUNC) &_adanear_NearMissAvgDistCpp, 2},
     {NULL, NULL, 0}
 };
 
-RcppExport void R_init_sattvaR(DllInfo *dll) {
+RcppExport void R_init_adanear(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
 }
