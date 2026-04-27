@@ -1,4 +1,4 @@
-# sattvaR <img src="man/figures/logo.png" align="right" height="140"/>
+# adanear <img src="man/figures/logo.png" align="right" height="140"/>
 
 <!-- badges -->
 ![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)
@@ -9,8 +9,6 @@
 ---
 
 ## Overview
-
-`sattvaR` provides high-performance implementations of class imbalance handling methods for binary classification using the tidymodels ecosystem.
 
 The package introduces custom recipes steps designed to:  
 
