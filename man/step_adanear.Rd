@@ -18,6 +18,7 @@ step_adanear(
   increaseRatio = 0.2,
   neighborsAdasyn = 5L,
   neighborsNearMiss = 5L,
+  under_ratio = 1,
   ef = 200L,
   m = 16L,
   nThreads = NULL,
@@ -44,6 +45,11 @@ step_adanear(
 \item{increaseRatio}{Razão de aumento da classe minoritária.}
 \item{neighborsAdasyn}{Número de vizinhos usados no ADASYN.}
 \item{neighborsNearMiss}{Número de vizinhos minoritários no NearMiss-1.}
+\item{under_ratio}{Valor numérico maior ou igual a 1 que define quantos
+registros da maioria serão mantidos em relação ao tamanho da minoria após a
+adição de sintéticos no ADASYN. Com \code{under_ratio = 1}, as classes se
+igualam; com \code{under_ratio = 1.3}, a maioria final terá 1.3 vezes a
+quantidade da minoria.}
 \item{ef}{Parâmetro \code{ef} do HNSW.}
 \item{m}{Parâmetro \code{M} do HNSW.}
 \item{nThreads}{Número de threads; \code{NULL} usa detecção automática com limites seguros do ambiente.}

@@ -72,6 +72,24 @@ test_that("step_adanear valida majorityFraction em (0, 1]", {
   )
 })
 
+test_that("step_adanear valida under_ratio maior ou igual a 1", {
+  training <- data.frame(
+    y = factor(c("no", "no", "no", "yes")),
+    x1 = c(1, 2, 3, 4)
+  )
+
+  rec <- recipes::recipe(y ~ ., data = training)
+
+  expect_error(
+    step_adanear(rec, y, under_ratio = 0.99),
+    "under_ratio"
+  )
+
+  expect_no_error(
+    step_adanear(rec, y, under_ratio = 1.3)
+  )
+})
+
 test_that("ValidateStoredStepState falha com seed invalido", {
   obj <- list(
     trained = TRUE,
@@ -141,6 +159,6 @@ test_that("tunable.step_adanear expõe hiperparâmetros para tune", {
   expect_s3_class(tunable_tbl, "tbl_df")
   expect_setequal(
     tunable_tbl$name,
-    c("increaseRatio", "neighborsAdasyn", "neighborsNearMiss", "majorityFraction")
+    c("increaseRatio", "neighborsAdasyn", "neighborsNearMiss", "under_ratio", "majorityFraction")
   )
 })
