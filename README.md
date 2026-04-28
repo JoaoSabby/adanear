@@ -71,6 +71,7 @@ rec <- recipes::recipe(Class ~ ., data = train_data) |>
   adanear::step_adanear(
     Class,
     increaseRatio = 0.2,
+    under_ratio = 1L,
     neighborsAdasyn = 5L,
     neighborsNearMiss = 5L,
     seed = 42L
