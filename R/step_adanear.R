@@ -33,6 +33,13 @@
 #'   ADASYN
 #' @param neighborsNearMiss Inteiro positivo. Numero de vizinhos minoritarios
 #'   usados no ranking do NearMiss-1
+#' @param under_ratio Valor numerico maior ou igual a `1`. Controla quantos
+#'   registros da classe majoritaria serao mantidos pelo NearMiss-1 em relacao
+#'   a quantidade da classe minoritaria apos o ADASYN (ou seja, apos a adicao
+#'   de registros sinteticos). Se `under_ratio = 1`, o resultado fica balanceado
+#'   (mesma quantidade entre minoria e maioria). Se `under_ratio = 1.3`, a
+#'   maioria final tera `1.3` vezes o tamanho da minoria final. Valores abaixo
+#'   de `1` nao sao aceitos.
 #' @param ef Inteiro positivo. Parametro `ef` repassado ao
 #'   `RcppHNSW::hnsw_build()` e ao `RcppHNSW::hnsw_search()`
 #' @param m Inteiro positivo. Parametro `M` do grafo HNSW
@@ -117,6 +124,7 @@ step_adanear <- function(recipe,
                          increaseRatio = 0.20,
                          neighborsAdasyn = 5L,
                          neighborsNearMiss = 5L,
+                         under_ratio = 1,
                          ef = 200L,
                          m = 16L,
                          nThreads = NULL,
@@ -144,6 +152,7 @@ step_adanear <- function(recipe,
   ValidateSingleNumber(increaseRatio, "increaseRatio", minValue = 0)
   ValidateSingleNumber(neighborsAdasyn, "neighborsAdasyn", minValue = 1, integerish = TRUE)
   ValidateSingleNumber(neighborsNearMiss, "neighborsNearMiss", minValue = 1, integerish = TRUE)
+  ValidateSingleNumber(under_ratio, "under_ratio", minValue = 1)
   ValidateSingleNumber(ef, "ef", minValue = 1, integerish = TRUE)
   ValidateSingleNumber(m, "m", minValue = 1, integerish = TRUE)
   ValidateSingleNumber(nThreads, "nThreads", minValue = 1, integerish = TRUE)
@@ -169,6 +178,7 @@ step_adanear <- function(recipe,
       increaseRatio = increaseRatio,
       neighborsAdasyn = as.integer(neighborsAdasyn),
       neighborsNearMiss = as.integer(neighborsNearMiss),
+      under_ratio = under_ratio,
       ef = as.integer(ef),
       m = as.integer(m),
       nThreads = as.integer(max(1L, nThreads)),
@@ -233,6 +243,7 @@ prep.step_adanear <- function(x, training, info = NULL, ...) {
     increaseRatio = x$increaseRatio,
     neighborsAdasyn = x$neighborsAdasyn,
     neighborsNearMiss = x$neighborsNearMiss,
+    under_ratio = x$under_ratio,
     ef = x$ef,
     m = x$m,
     nThreads = x$nThreads,
@@ -325,6 +336,7 @@ bake.step_adanear <- function(object, new_data, ...) {
       minorityLevel = object$minorityLevel,
       majorityLevel = object$majorityLevel,
       neighborsNearMiss = object$neighborsNearMiss,
+      under_ratio = object$under_ratio,
       ef = object$ef,
       m = object$m,
       nThreads = object$nThreads
@@ -360,10 +372,11 @@ print.step_adanear <- function(x, width = max(20, getOption("width") - 30), ...)
   recipes::printer(termLabel, x$terms, x$trained, width = width)
   cat(
     sprintf(
-      "  increaseRatio: %.3f | neighborsAdasyn: %d | neighborsNearMiss: %d | ef: %d | M: %d | threads: %d | majFrac: %.2f | seed: %s\n",
+      "  increaseRatio: %.3f | neighborsAdasyn: %d | neighborsNearMiss: %d | under_ratio: %.2f | ef: %d | M: %d | threads: %d | majFrac: %.2f | seed: %s\n",
       x$increaseRatio,
       x$neighborsAdasyn,
       x$neighborsNearMiss,
+      x$under_ratio,
       x$ef,
       x$m,
       x$nThreads,
@@ -391,6 +404,7 @@ tidy.step_adanear <- function(x, ...) {
     increaseRatio = x$increaseRatio,
     neighborsAdasyn = x$neighborsAdasyn,
     neighborsNearMiss = x$neighborsNearMiss,
+    under_ratio = x$under_ratio,
     ef = x$ef,
     m = x$m,
     nThreads = x$nThreads,
@@ -419,12 +433,14 @@ tunable.step_adanear <- function(x, ...) {
       "increaseRatio",
       "neighborsAdasyn",
       "neighborsNearMiss",
+      "under_ratio",
       "majorityFraction"
     ),
     call_info = list(
       list(pkg = "dials", fun = "over_ratio", range = c(NA, NA), trans = NULL),
       list(pkg = "dials", fun = "neighbors", range = c(NA, NA), trans = NULL),
       list(pkg = "dials", fun = "neighbors", range = c(NA, NA), trans = NULL),
+      list(pkg = "dials", fun = "under_ratio", range = c(NA, NA), trans = NULL),
       list(pkg = "dials", fun = "frac_pt", range = c(NA, NA), trans = NULL)
     ),
     source = "recipe",
@@ -642,6 +658,7 @@ ValidateStoredStepState <- function(object) {
   }
 
   ValidateSingleNumber(object$nThreads, "nThreads", minValue = 1, integerish = TRUE)
+  ValidateSingleNumber(object$under_ratio, "under_ratio", minValue = 1)
 
   invisible(TRUE)
 }
@@ -1330,6 +1347,7 @@ SelectNearMissRows <- function(dataFrame,
                                minorityLevel,
                                majorityLevel,
                                neighborsNearMiss,
+                               under_ratio,
                                ef,
                                m,
                                nThreads) {
@@ -1343,7 +1361,7 @@ SelectNearMissRows <- function(dataFrame,
     return(dataFrame)
   }
 
-  keepCount <- min(nMinority, nMajority)
+  keepCount <- min(nMajority, ceiling(nMinority * under_ratio))
 
   if (keepCount == nMajority) {
     return(dataFrame)

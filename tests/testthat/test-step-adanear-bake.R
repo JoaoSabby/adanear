@@ -53,6 +53,22 @@ test_that("bake com increaseRatio = 0 nao altera o numero de linhas", {
   n_minority <- sum(training$y == "yes")
   expect_lte(nrow(baked), nrow(training))
   expect_equal(sum(baked$y == "yes"), n_minority)
+  expect_equal(sum(baked$y == "no"), n_minority)
+})
+
+test_that("under_ratio controla maioria em funcao da minoria apos ADASYN", {
+  training <- make_imbalanced_data(n_majority = 30L, n_minority = 6L)
+
+  rec <- recipes::recipe(y ~ ., data = training) |>
+    step_adanear(y, increaseRatio = 0.5, under_ratio = 1.3, seed = 101L, nThreads = 1L)
+
+  prepped <- recipes::prep(rec, training = training)
+  baked <- recipes::bake(prepped, new_data = training)
+
+  n_minority_after <- sum(baked$y == "yes")
+  n_majority_after <- sum(baked$y == "no")
+
+  expect_equal(n_majority_after, ceiling(n_minority_after * 1.3))
 })
 
 test_that("bake preserva os nomes e tipos das colunas originais", {
