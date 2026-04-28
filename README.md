@@ -74,6 +74,7 @@ rec <- recipes::recipe(Class ~ ., data = train_data) |>
     under_ratio = 1L,
     neighborsAdasyn = 5L,
     neighborsNearMiss = 5L,
+    nThreads = 4L,
     seed = 42L
   )
 
