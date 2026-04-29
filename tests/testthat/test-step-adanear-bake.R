@@ -105,6 +105,21 @@ test_that("tidy retorna tibble com as configuracoes do step", {
   expect_equal(td$seed, 55L)
 })
 
+test_that("audit = TRUE adiciona colunas de rastreabilidade", {
+  training <- make_imbalanced_data(n_majority = 30L, n_minority = 6L)
+
+  rec <- recipes::recipe(y ~ ., data = training) |>
+    step_adanear(y, increaseRatio = 0.5, seed = 99L, nThreads = 1L, audit = TRUE)
+
+  prepped <- recipes::prep(rec, training = training)
+  baked <- recipes::bake(prepped, new_data = training)
+
+  expect_true(".adanear_audit_id" %in% names(baked))
+  expect_true(".adanear_audit_origin" %in% names(baked))
+  expect_true(all(baked$.adanear_audit_origin %in% c("original", "synthetic")))
+  expect_true(any(is.na(baked$.adanear_audit_id)))
+})
+
 test_that("seeds distintos produzem resultados potencialmente diferentes", {
   training <- make_imbalanced_data(n_majority = 30L, n_minority = 6L)
 

@@ -31,6 +31,9 @@ step_adanear(
   nonNegativeIntegerNames = NULL,
   minorityLevel = NULL,
   majorityLevel = NULL,
+  audit = FALSE,
+  audit_id_col = ".adanear_audit_id",
+  audit_origin_col = ".adanear_audit_origin",
   skip = TRUE,
   id = recipes::rand_id("adanear")
 )
@@ -62,6 +65,10 @@ quantidade da minoria.}
 \item{nonNegativeIntegerNames}{Subset de \code{integerNames} não-negativos.}
 \item{minorityLevel}{Nível minoritário aprendido no \code{prep()}.}
 \item{majorityLevel}{Nível majoritário aprendido no \code{prep()}.}
+\item{audit}{Se \code{TRUE}, adiciona colunas de auditoria no \code{bake()}.}
+\item{audit_id_col}{Nome da coluna de ID de auditoria.}
+\item{audit_origin_col}{Nome da coluna com origem da linha
+(\code{"original"} ou \code{"synthetic"}).}
 \item{skip}{Se \code{TRUE}, aplica só no treino.}
 \item{id}{Identificador único do step.}
 }
