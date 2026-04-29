@@ -62,6 +62,11 @@
 #'   de treino sao sempre nao negativos
 #' @param minorityLevel Nivel da classe minoritaria aprendido no `prep()`
 #' @param majorityLevel Nivel da classe majoritaria aprendido no `prep()`
+#' @param audit Logico. Se `TRUE`, `bake()` adiciona colunas de auditoria:
+#'   `audit_id_col` (ID original; `NA` para sinteticos) e
+#'   `audit_origin_col` (`"original"` ou `"synthetic"`).
+#' @param audit_id_col Nome da coluna de ID quando `audit = TRUE`
+#' @param audit_origin_col Nome da coluna de origem quando `audit = TRUE`
 #' @param skip Logico. Deve permanecer `TRUE` para que o step seja aplicado
 #'   apenas ao conjunto de treino
 #' @param id Identificador unico do step
@@ -137,6 +142,9 @@ step_adanear <- function(recipe,
                          nonNegativeIntegerNames = NULL,
                          minorityLevel = NULL,
                          majorityLevel = NULL,
+                         audit = FALSE,
+                         audit_id_col = ".adanear_audit_id",
+                         audit_origin_col = ".adanear_audit_origin",
                          skip = TRUE,
                          id = recipes::rand_id("adanear")) {
 
@@ -164,7 +172,15 @@ step_adanear <- function(recipe,
   )
 
   ValidateSingleNumber(seed, "seed", minValue = 0, integerish = TRUE, allowNull = TRUE)
-  seedStored <- if (is.null(seed)) NA_integer_ else as.integer(seed)
+  if (!is.logical(audit) || length(audit) != 1L || is.na(audit)) {
+    rlang::abort("`audit` deve ser TRUE ou FALSE.")
+  }
+  if (!is.character(audit_id_col) || length(audit_id_col) != 1L || nchar(audit_id_col) == 0L) {
+    rlang::abort("`audit_id_col` deve ser uma string nao vazia.")
+  }
+  if (!is.character(audit_origin_col) || length(audit_origin_col) != 1L || nchar(audit_origin_col) == 0L) {
+    rlang::abort("`audit_origin_col` deve ser uma string nao vazia.")
+  }
 
   recipes::add_step(
     recipe,
@@ -191,6 +207,9 @@ step_adanear <- function(recipe,
       nonNegativeIntegerNames = nonNegativeIntegerNames,
       minorityLevel = minorityLevel,
       majorityLevel = majorityLevel,
+      audit = isTRUE(audit),
+      audit_id_col = audit_id_col,
+      audit_origin_col = audit_origin_col,
       skip = skip,
       id = id
     )
@@ -256,6 +275,9 @@ prep.step_adanear <- function(x, training, info = NULL, ...) {
     nonNegativeIntegerNames = typeNames$nonNegativeIntegerNames,
     minorityLevel = classLevels$minority,
     majorityLevel = classLevels$majority,
+    audit = x$audit,
+    audit_id_col = x$audit_id_col,
+    audit_origin_col = x$audit_origin_col,
     skip = x$skip,
     id = x$id
   )
@@ -288,6 +310,14 @@ bake.step_adanear <- function(object, new_data, ...) {
   ValidateStoredStepState(object)
 
   ExecuteBake <- function() {
+    if (isTRUE(object$audit)) {
+      if (object$audit_id_col %in% colnames(new_data) || object$audit_origin_col %in% colnames(new_data)) {
+        rlang::abort("Colunas de auditoria conflitam com colunas existentes. Ajuste `audit_id_col`/`audit_origin_col`.")
+      }
+      new_data[[object$audit_id_col]] <- seq_len(nrow(new_data))
+      new_data[[object$audit_origin_col]] <- "original"
+    }
+
     xNorm <- NormalizeMatrixCpp(
       x = as.matrix(new_data[, object$predictors, drop = FALSE]),
       means = object$means,
@@ -313,6 +343,10 @@ bake.step_adanear <- function(object, new_data, ...) {
       nThreads = object$nThreads,
       majorityFraction = object$majorityFraction
     )
+    if (isTRUE(object$audit) && nrow(syntheticData) > 0L) {
+      syntheticData[[object$audit_id_col]] <- as.integer(NA)
+      syntheticData[[object$audit_origin_col]] <- "synthetic"
+    }
 
     augmentedData <- data.table::rbindlist(
       list(
@@ -410,6 +444,9 @@ tidy.step_adanear <- function(x, ...) {
     nThreads = x$nThreads,
     majorityFraction = x$majorityFraction,
     seed = if (length(x$seed) == 1L && is.na(x$seed)) NA_integer_ else x$seed,
+    audit = isTRUE(x$audit),
+    audit_id_col = x$audit_id_col,
+    audit_origin_col = x$audit_origin_col,
     id = x$id
   )
 }

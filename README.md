@@ -96,3 +96,49 @@ fit_wf <- workflows::fit(wf, data = train_data)
 pred_prob <- predict(fit_wf, new_data = test_data, type = "prob")
 head(pred_prob)
 ```
+
+## Audit trail note (`themis::step_adasyn()` / `themis::step_nearmiss()`)
+
+For audit purposes, `themis` balancing steps generally return only the transformed training rows during `bake()`. They do not natively expose, as dedicated metadata columns, which rows were synthetically created (`step_adasyn`) or which majority rows were removed (`step_nearmiss`).
+
+A practical workaround is to create a stable row identifier column *before* sampling (for example with `dplyr::row_number()`), keep it through the recipe, and compare the original IDs against the baked IDs. Synthetic rows will typically have missing/new IDs depending on your implementation choices, while removed rows are those IDs absent from the baked output.
+
+## `step_adanear()` audit example
+
+```r
+library(recipes)
+library(dplyr)
+library(adanear)
+
+set.seed(42)
+training <- data.frame(
+  y  = factor(c(rep("no", 30), rep("yes", 6))),
+  x1 = rnorm(36),
+  x2 = rnorm(36)
+)
+
+rec <- recipe(y ~ ., data = training) |>
+  step_adanear(
+    y,
+    increaseRatio = 0.5,
+    under_ratio = 1,
+    seed = 99L,
+    nThreads = 1L,
+    audit = TRUE,
+    audit_id_col = ".audit_id",
+    audit_origin_col = ".audit_origin"
+  )
+
+prepped <- prep(rec, training = training)
+baked <- bake(prepped, new_data = training)
+
+# Linhas sintéticas
+synthetic_rows <- baked |> filter(.audit_origin == "synthetic")
+
+# IDs originais removidos
+original_ids_kept <- baked |>
+  filter(.audit_origin == "original") |>
+  pull(.audit_id)
+
+removed_original_ids <- setdiff(seq_len(nrow(training)), original_ids_kept)
+```
